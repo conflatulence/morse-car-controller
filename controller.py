@@ -3,17 +3,84 @@
 from gi.repository import Gtk
 from gi.repository import Gdk
 
-#import cairo
-from math import pi, cos, sin
+import sys
+import logging
+from logging import error, warning, info
 import json
 import re
+from math import pi, cos, sin
 
 from client import Client
+
+def clamp(min_val, max_val, val):
+    if val < min_val:
+        return min_val
+    if val > max_val:
+        return max_val
+    return val
+
+class SpeedController:
+    def __init__(self):
+        self.target_speed = 0
+        self.stopping = False
+        self.last_integral = 0
+        self.last_error = 0
+        self.Kp = 10
+        self.Ki = 5
+        self.Kd = 0
         
+        self.throttle = 0
+        self.brake = 0
+        
+    def stop(self, controls):
+        self.stopping = True
+        self.target_speed = 0 
+        controls.throttle = 0
+        controls.brake = 2
+        
+    def set_speed(self, speed, controls):
+        if self.target_speed > 0 and speed < 0 or self.target_speed < 0 and speed > 0:
+            self.stop()
+
+        self.target_speed = clamp(-10, 10, speed)
+        
+    def adjust_speed(self, amount, controls):
+        self.set_speed(self.target_speed + amount, controls) 
+
+    def update(self, current_speed, dt, controls):        
+        assert(current_speed >= 0)
+        
+        if self.stopping and abs(current_speed) < 0.1:
+            self.stopping = False
+                
+        if self.stopping:
+            integral = 0
+            error = 0
+            throttle = 0
+            brake = 2
+        else:
+            error = abs(self.target_speed) - current_speed
+            integral = self.last_integral + error*dt
+            derivative = (error - self.last_error)/dt
+            
+            throttle = self.Kp*error + self.Ki*integral + self.Kd*derivative
+            
+            throttle = clamp(0, 40, throttle)
+            brake = 0
+            
+            if self.target_speed < 0:
+                throttle = -throttle
+
+        self.last_error = error
+        self.last_integral = integral
+        
+        controls.throttle = throttle
+        controls.brake = brake
+
 class MainWindow:
     def __init__(self):
         w = Gtk.Window()
-        w.set_default_size(200, 200)
+        w.set_default_size(300, 300)
         self.drawing_area = Gtk.DrawingArea()
         w.add(self.drawing_area)
 
@@ -39,11 +106,13 @@ class MainWindow:
         self.range_client = None
         self.odometry_client = None
         
-        self.accel = 0
+        self.throttle = 0
         self.steer = 0
         self.brake = 0
         
-        self.disable_forwards = False
+        self.speed_control = SpeedController()
+        
+        self.current_speed = 0
         self.dodging = False
 
     def send_service_message(self, identifier, component, message, data=[]):
@@ -52,8 +121,10 @@ class MainWindow:
 
     # the steering value is in radians.
     def send_motion_message(self):
+        logging.info('Sending motion message!')
         if self.motion_client is not None:
-            d = {'steer':self.steer, 'force':self.accel, 'brake':self.brake}
+            # the sign of the throttle is reversed!
+            d = {'steer':self.steer, 'force':-self.throttle, 'brake':self.brake}
             line = json.dumps(d) + '\n'
             self.motion_client.send(line)
         else:
@@ -67,11 +138,11 @@ class MainWindow:
     def on_service_message(self, client, line):
         m = re.match('^(?P<id>\w+) (?P<success>\w+) (?P<data>.*)$', line)
         if m is None:
-            print 'Invalid service message:', line
+            warning('Invalid service message:' + line)
             return
         
         if m.group('success') != 'SUCCESS':
-            print 'Service command failed:', line
+            warning('Service command failed:' + line)
             return
 
         identifier = m.group('id')
@@ -94,67 +165,50 @@ class MainWindow:
             obj = json.loads(line)
             print 'Motion:', obj
         except ValueError, e:
-            print 'Invalid motion message:', e
-
-#     # function not tested, probably wrong.
-#     def range_to_xy(self, r, n):
-#         a = self.range_angles[n]
-#         x = r*sin(a)
-#         y = r*cos(a)
-#         return (x,y)
-
+            warning('Invalid motion message:' + e)
+        
     def on_range_message(self, client, line):
         try:
             obj = json.loads(line)
-            ranges = obj['range_list']
-            N = len(ranges)
-            #if self.range_angles is None:
-            #    self.range_angles = [-pi/2 + (pi/2)*a/(len(ranges)-1) for a in range(N)]
-                
-            print ranges
-            
-            for r in ranges[int(N/3):int(2*N/3)]:
-                if r < 4:
-                    if not self.disable_forwards:
-                        self.disable_forwards = True
-                        self.accel = 0
-                        self.brake = 2
-                        self.send_motion_message()
-                    break
-            else:
-                self.disable_forwards = False
-                
-            for r in ranges[0:int(N/3)]:
-                if r < 4 and self.accel < 0:
-                    self.dodging = True
-                    self.steer = pi/4
-                    self.send_motion_message()
-                    break
-            else:
-                if self.dodging is True:
-                    self.dodging = False
-                    self.steer = 0
-                    self.send_motion_message()
-                
-            for r in ranges[int(2*N/3):N]:
-                if r < 4 and self.accel < 0:
-                    self.dodging = True
-                    self.steer = -pi/4
-                    self.send_motion_message()
-                    break
-            else:
-                if self.dodging is True:
-                    self.dodging = False
-                    self.steer = 0
-                    self.send_motion_message()
-
         except ValueError, e:
-            print 'Invalid range message:', e
+            error('Invalid range message:' + e)
+            return
+         
+        ranges = obj['range_list']
+        N = len(ranges)
+        
+        if min(ranges) < 0:
+            warning('Range message was less than 0 (%d)' % (min(ranges)))
+
+        min_left = min(ranges[0:int(N/3)])
+        min_middle = min(ranges[int(N/3):int(2*N/3)])
+        min_right = min(ranges[int(2*N/3):N])
+        
+        if min_middle < 4 or (min_left < 4 and min_right < 4):
+            if self.speed_control.target_speed > 0:
+                self.speed_control.stop(self)
+        elif self.speed_control.target_speed > 0:
+            if min_left < 4:
+                self.dodging = True
+                self.steer = pi/4
+            elif min_right < 4:
+                self.dodging = True
+                self.steer = -pi/4
+            elif self.dodging:
+                self.dodging = False
+                self.steer = 0
 
     def on_odometry_message(self, client, line):
         try:
             obj = json.loads(line)
             #print 'Odometry:', obj
+            dS = obj['dS']
+            dt = 0.1
+            self.current_speed = dS/dt
+            self.speed_control.update(self.current_speed, dt, self)
+            self.send_motion_message()
+            self.drawing_area.queue_draw()
+                
         except ValueError, e:
             print 'Invalid odometry message:', e
 
@@ -163,12 +217,21 @@ class MainWindow:
             obj = json.loads(line)
             print obj
         except ValueError, e:
-            print "Stream message was not valid json", e
+            error("Stream message was not valid json" + e)
             return
 
     def draw_ranges(self):
         pass
 
+    def draw_text_line(self, cr, line_number, text):
+        cr.save()
+        line_height = cr.font_extents()[2] + 2
+        #cr.move_to(10, line_height)
+        cr.translate(0, (line_number+1)*line_height)
+        cr.show_text(text)
+        cr.fill()
+        cr.restore()
+        
     # cr is the cairo context
     def on_draw(self, widget, cr):
         #print dir(cr)
@@ -181,11 +244,16 @@ class MainWindow:
         cr.paint()
     
         cr.set_source_rgb(0,0,0)
-        cr.move_to(20, 20)
-        cr.set_font_size(20)
-        #cr.show_text("Recieved:" + str(self.last_data))
-        cr.fill()            
-
+        cr.set_font_size(16)
+        
+        self.draw_text_line(cr, 0, "Speed: %0.2f" % (self.current_speed))
+        self.draw_text_line(cr, 1, "Steer: %0.2f Throttle: %0.2f Brake: %0.2f" % (self.steer, self.throttle, self.brake))
+        self.draw_text_line(cr, 2, "Target Speed: %0.2f" % (self.speed_control.target_speed))
+        #self.draw_text_line(cr, 3, "Disable forwards: %s Dodging: %s" % (self.disable_forwards, self.dodging))
+        #cr.move_to(20, 20)
+        #cr.show_text("Speed:" + str(self.last_speed))
+        #cr.move_to(20, 30)
+        
     def on_key_press(self, w, event):
         if event.string == 'q' or event.keyval == Gdk.KEY_Escape:
             Gtk.main_quit()
@@ -194,46 +262,31 @@ class MainWindow:
             #print 'Left pressed'
             if not self.dodging:
                 self.steer = pi/4
-                self.send_motion_message()
 
         elif event.keyval == Gdk.KEY_Right:
             #print 'Right pressed'
             if not self.dodging:
                 self.steer = -pi/4
-                self.send_motion_message()
 
         elif event.keyval == Gdk.KEY_Up:
             #print 'Up pressed'
-            if self.disable_forwards:
-                self.brake = 2
-                self.accel = 0
-            else:
-                self.brake = 0
-                self.accel -= 1
-            self.send_motion_message()
+            self.speed_control.adjust_speed(1.0, self)
 
         elif event.keyval == Gdk.KEY_Down:
-            #print 'Down pressed'
-            self.brake = 0
-            self.accel += 1
-            self.send_motion_message()
+            self.speed_control.adjust_speed(-1.0, self)
 
         elif event.keyval == Gdk.KEY_space:
             #print 'Space pressed'
-            self.accel = 0
-            self.brake = 2
-            self.send_motion_message()
+            self.speed_control.stop(self)
 
     def on_key_release(self, w, event):
         if event.keyval == Gdk.KEY_Left:
             #print 'Left released'
             self.steer = 0
-            self.send_motion_message()
 
         elif event.keyval == Gdk.KEY_Right:
             #print 'Right released'
             self.steer = 0
-            self.send_motion_message()
 
         elif event.keyval == Gdk.KEY_Up:
             #print 'Up released'
@@ -249,6 +302,8 @@ class MainWindow:
         print 'event type = %d, x = %d y = %d' % (event.type, event.x, event.y)
 
 if __name__ == '__main__':
+    
+    logging.basicConfig(level=logging.WARNING)
 
     main_window = MainWindow()
 

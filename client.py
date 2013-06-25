@@ -3,6 +3,8 @@ from gi.repository import GLib
 from gi.repository import Gio
 from gi.repository import GObject
 
+from logging import error, warning, info
+
 class Client(GObject.GObject):
 
     # as explained in https://developer.gnome.org/pygobject/stable/class-gobject.html#method-gobject--connect
@@ -21,10 +23,10 @@ class Client(GObject.GObject):
 #        print 'Message signal:', line.strip()
 
     def do_connected(self):
-        print "Client connected"
+        info("Client connected")
 
     def do_disconnected(self):
-        print "Client disconnected"
+        info("Client disconnected")
 
     def __init__(self, host, port):
         GObject.GObject.__init__(self)
@@ -40,7 +42,7 @@ class Client(GObject.GObject):
         try:
             self.connection = self.socket_client.connect_to_host_finish(result)
         except GLib.GError, e:
-            print 'Problem connecting to host.', e
+            error('Problem connecting to host.' + e)
             if self.auto_reconnect:
                 GLib.timeout_add_seconds(self.reconnect_period, self.reconnect_timeout)
             return
@@ -70,24 +72,24 @@ class Client(GObject.GObject):
         if condition == GLib.IOCondition.IN:
             line = source.readline()
             if line is None or len(line) == 0:
-                print "Client condition IN but not data read."
+                warning("Client condition IN but not data read.")
                 self.handle_disconnect()
                 return False
             else:
                 self.emit("message", line)
 
         elif condition == GLib.IOCondition.HUP:
-            print "Client received HUP"
+            info("Client received HUP")
             self.handle_disconnect()
             return False
 
         elif condition == GLib.IOCondition.NVAL:
-            print "Client received NVAL"
+            info("Client received NVAL")
             self.handle_disconnect()
             return False
 
         else:
-            print "Client received unknown condition"
+            warning("Client received unknown condition")
             return False
     
         return True
