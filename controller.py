@@ -3,79 +3,16 @@
 from gi.repository import Gtk
 from gi.repository import Gdk
 
-import sys
 import logging
 from logging import error, warning, info
 import json
 import re
-from math import pi, cos, sin
+from math import pi
 
 from client import Client
-
-def clamp(min_val, max_val, val):
-    if val < min_val:
-        return min_val
-    if val > max_val:
-        return max_val
-    return val
-
-class SpeedController:
-    def __init__(self):
-        self.target_speed = 0
-        self.stopping = False
-        self.last_integral = 0
-        self.last_error = 0
-        self.Kp = 10
-        self.Ki = 5
-        self.Kd = 0
-        
-        self.throttle = 0
-        self.brake = 0
-        
-    def stop(self, controls):
-        self.stopping = True
-        self.target_speed = 0 
-        controls.throttle = 0
-        controls.brake = 2
-        
-    def set_speed(self, speed, controls):
-        if self.target_speed > 0 and speed < 0 or self.target_speed < 0 and speed > 0:
-            self.stop()
-
-        self.target_speed = clamp(-10, 10, speed)
-        
-    def adjust_speed(self, amount, controls):
-        self.set_speed(self.target_speed + amount, controls) 
-
-    def update(self, current_speed, dt, controls):        
-        assert(current_speed >= 0)
-        
-        if self.stopping and abs(current_speed) < 0.1:
-            self.stopping = False
-                
-        if self.stopping:
-            integral = 0
-            error = 0
-            throttle = 0
-            brake = 2
-        else:
-            error = abs(self.target_speed) - current_speed
-            integral = self.last_integral + error*dt
-            derivative = (error - self.last_error)/dt
-            
-            throttle = self.Kp*error + self.Ki*integral + self.Kd*derivative
-            
-            throttle = clamp(0, 40, throttle)
-            brake = 0
-            
-            if self.target_speed < 0:
-                throttle = -throttle
-
-        self.last_error = error
-        self.last_integral = integral
-        
-        controls.throttle = throttle
-        controls.brake = brake
+from utils import Position
+from speed_control import SpeedController
+from auto_reverse import AutoReverseController
 
 class MainWindow:
     def __init__(self):
@@ -110,10 +47,14 @@ class MainWindow:
         self.steer = 0
         self.brake = 0
         
-        self.speed_control = SpeedController()
+        self.speed_control = SpeedController(self)
         
         self.current_speed = 0
         self.dodging = False
+        
+        self.gps = Position()
+        
+        self.reverse_controller = AutoReverseController(self, self.speed_control)
 
     def send_service_message(self, identifier, component, message, data=[]):
         msg = '%s %s %s %s' % (identifier, component, message, json.dumps(data))
@@ -134,6 +75,7 @@ class MainWindow:
         self.send_service_message('motion_port', 'simulation', 'get_stream_port', ['hummer.motion'])
         self.send_service_message('range_port', 'simulation', 'get_stream_port', ['hummer.scanner'])
         self.send_service_message('odometry_port', 'simulation', 'get_stream_port', ['hummer.odometry'])
+        self.send_service_message('gps_port', 'simulation', 'get_stream_port', ['hummer.gps'])
 
     def on_service_message(self, client, line):
         m = re.match('^(?P<id>\w+) (?P<success>\w+) (?P<data>.*)$', line)
@@ -159,19 +101,22 @@ class MainWindow:
         elif identifier == 'odometry_port':
             self.odometry_client = Client(self.sim_host, int(data))
             self.odometry_client.connect("message", self.on_odometry_message)
+        
+        elif identifier == 'gps_port':
+            self.gps_client = Client(self.sim_host, int(data))
+            self.gps_client.connect("message", self.on_gps_message)
+        
+        else:
+            warning("Unhandled identifier:" + identifier)
 
     def on_motion_message(self, client, line):
-        try:
-            obj = json.loads(line)
-            print 'Motion:', obj
-        except ValueError, e:
-            warning('Invalid motion message:' + e)
+        warning("Got unhandled motion message:" + line)
         
     def on_range_message(self, client, line):
         try:
             obj = json.loads(line)
         except ValueError, e:
-            error('Invalid range message:' + e)
+            error('Invalid range message:' + e.message)
             return
          
         ranges = obj['range_list']
@@ -184,19 +129,7 @@ class MainWindow:
         min_middle = min(ranges[int(N/3):int(2*N/3)])
         min_right = min(ranges[int(2*N/3):N])
         
-        if min_middle < 4 or (min_left < 4 and min_right < 4):
-            if self.speed_control.target_speed > 0:
-                self.speed_control.stop(self)
-        elif self.speed_control.target_speed > 0:
-            if min_left < 4:
-                self.dodging = True
-                self.steer = pi/4
-            elif min_right < 4:
-                self.dodging = True
-                self.steer = -pi/4
-            elif self.dodging:
-                self.dodging = False
-                self.steer = 0
+        self.reverse_controller.update_range(min_left, min_middle, min_right)
 
     def on_odometry_message(self, client, line):
         try:
@@ -205,23 +138,22 @@ class MainWindow:
             dS = obj['dS']
             dt = 0.1
             self.current_speed = dS/dt
-            self.speed_control.update(self.current_speed, dt, self)
+            self.speed_control.update(self.current_speed, dt)
             self.send_motion_message()
             self.drawing_area.queue_draw()
                 
         except ValueError, e:
-            print 'Invalid odometry message:', e
+            warning('Invalid odometry message:' + e.message)
 
-    def on_stream_message(self, client, line):
-        try:        
+    def on_gps_message(self, client, line):
+        try:
             obj = json.loads(line)
-            print obj
+            self.gps.x = obj['x']
+            self.gps.y = obj['y']
+            self.gps.z = obj['z']
+            
         except ValueError, e:
-            error("Stream message was not valid json" + e)
-            return
-
-    def draw_ranges(self):
-        pass
+            warning('Invalid gps message:' + e.message)
 
     def draw_text_line(self, cr, line_number, text):
         cr.save()
@@ -250,6 +182,7 @@ class MainWindow:
         self.draw_text_line(cr, 1, "Steer: %0.2f Throttle: %0.2f Brake: %0.2f" % (self.steer, self.throttle, self.brake))
         self.draw_text_line(cr, 2, "Target Speed: %0.2f" % (self.speed_control.target_speed))
         #self.draw_text_line(cr, 3, "Disable forwards: %s Dodging: %s" % (self.disable_forwards, self.dodging))
+        self.draw_text_line(cr, 3, "GPS x=%05.2f y=%05.2f z=%05.2f" % (self.gps.x, self.gps.y, self.gps.z))
         #cr.move_to(20, 20)
         #cr.show_text("Speed:" + str(self.last_speed))
         #cr.move_to(20, 30)
@@ -270,14 +203,20 @@ class MainWindow:
 
         elif event.keyval == Gdk.KEY_Up:
             #print 'Up pressed'
-            self.speed_control.adjust_speed(1.0, self)
+            self.speed_control.adjust_speed(1.0)
 
         elif event.keyval == Gdk.KEY_Down:
-            self.speed_control.adjust_speed(-1.0, self)
+            self.speed_control.adjust_speed(-1.0)
 
         elif event.keyval == Gdk.KEY_space:
             #print 'Space pressed'
-            self.speed_control.stop(self)
+            self.speed_control.stop()
+            
+        elif event.keyval == Gdk.KEY_a:
+            self.reverse_controller.start()
+        
+        elif event.keyval == Gdk.KEY_s:
+            self.reverse_controller.stop()
 
     def on_key_release(self, w, event):
         if event.keyval == Gdk.KEY_Left:
