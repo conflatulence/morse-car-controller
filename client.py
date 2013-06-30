@@ -42,7 +42,7 @@ class Client(GObject.GObject):
         try:
             self.connection = self.socket_client.connect_to_host_finish(result)
         except GLib.GError, e:
-            error('Problem connecting to host.' + e)
+            error('Problem connecting to host:' + e.message)
             if self.auto_reconnect:
                 GLib.timeout_add_seconds(self.reconnect_period, self.reconnect_timeout)
             return
@@ -102,4 +102,4 @@ class Client(GObject.GObject):
             self.channel.write(line)
             self.channel.flush()
         except GLib.GError, e:
-            print 'Client send exception.', e
+            error('Client send exception:' + e.message)
