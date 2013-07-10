@@ -13,9 +13,9 @@ from math import pi
 
 from utils import Position, clamp
 
-MODE_PARK=0
-MODE_DRIVE=1
-MODE_AUTO=2
+MODE_PARK='park'
+MODE_DRIVE='drive'
+MODE_AUTO='auto'
 
 class CarInterface:
 	def __init__(self, parent):
@@ -75,36 +75,36 @@ class CarInterface:
 			self.parent.brake.update(self.brake)
 
 	def stop(self):
-		s = json.dumps({'cmd':'stop'})
+		s = json.dumps({'stop':0})
 		self.parent.send(s)
 	
 	def set_speed(self, speed):
 		if self.mode == MODE_DRIVE:
-			s = json.dumps({'cmd':'set_speed', 'speed':round(speed, 2)})
+			s = json.dumps({'set_speed':round(speed, 2)})
 			self.parent.send(s)
 		else:
 			warning("Not in drive mode.")
 
 	def adjust_speed(self, amount):
 		if self.mode == MODE_DRIVE:
-			s = json.dumps({'cmd':'adjust_speed', 'amount':round(amount, 2)})
+			s = json.dumps({'adjust_speed':round(amount, 2)})
 			self.parent.send(s)
 		else:
 			warning("Not in drive mode.")
 	
 	def turn(self, angle):
 		if self.mode == MODE_DRIVE:		
-			s = json.dumps({'cmd':'turn', 'angle':round(angle, 2)})
+			s = json.dumps({'steer':round(angle, 2)})
 			self.parent.send(s)
 		else:
 			warning("Not in drive mode.")
 
 	def set_target_pos(self, x, y):
-		s = json.dumps({'cmd':'target_pos', 'x':round(x,2), 'y':round(y,2)})
+		s = json.dumps({'target_pos':[round(x,2), round(y,2)]})
 		self.parent.send(s)
 
 	def set_auto_speed(self, speed):
-		s = json.dumps({'cmd':'config', 'auto_speed':round(speed,2)})
+		s = json.dumps({'auto_speed':round(speed,2)})
 		self.parent.send(s)
 
 	def set_mode(self, mode):
@@ -118,7 +118,7 @@ class CarInterface:
 			warning("Unknown mode requested.")
 			return
 
-		s = json.dumps({'cmd':'mode', 'mode':mode_str})
+		s = json.dumps({'mode':mode_str})
 		self.parent.send(s)
 
 class LabelVar(tk.Frame):
@@ -197,13 +197,15 @@ class Application(tk.Frame):
 		row += 1
 		self.mode.grid(row=row, column=0, sticky=tk.W)
 
-		self.mode_var = tk.IntVar()
+		self.mode_var = tk.StringVar()
 		self.mode_var.set(MODE_PARK)
 
+		column = 1
 		for text,mode in [("Park", MODE_PARK),("Drive", MODE_DRIVE),("Auto", MODE_AUTO)]:
 			b = tk.Radiobutton(lf, text=text, variable=self.mode_var,
 					value=mode, command=self.control_mode_changed)
-			b.grid(row=row, column=mode+1)
+			b.grid(row=row, column=column)
+			column += 1
 
 		row += 1
 		self.scroll_lock = tk.IntVar()
@@ -277,7 +279,7 @@ class Application(tk.Frame):
 
 	def control_mode_changed(self):
 		control_mode = self.mode_var.get()
-		self.add_text("New mode: %d.\n" % control_mode)
+		self.add_text("New mode: %s.\n" % control_mode)
 		self.car.set_mode(control_mode)
 
 	def key_pressed(self, event):
@@ -288,13 +290,13 @@ class Application(tk.Frame):
 			if event.keysym == 'Up':
 				self.car.adjust_speed(1)
 			elif event.keysym == 'Down':
-				self.car-adjust_speed(-1)
+				self.car.adjust_speed(-1)
 			elif event.keysym == 'Left':
 				self.car.turn(pi/3)
 			elif event.keysym == 'Right':
 				self.car.turn(-pi/3)
 			elif event.keysym == 'space':
-				self.car.stop
+				self.car.stop()
 
 	def key_released(self, event):
 		if self.car.mode == MODE_DRIVE:

@@ -1,83 +1,73 @@
-#!/usr/bin/env python
-
-from gi.repository import Gtk
-from gi.repository import Gdk
+#!/usr/bin/env python3
 
 import logging
-from logging import error, warning, info
+from logging import error, warning, info, debug
 import json
 import re
+import asyncore
+import signal
+
 from math import pi
 
 from client import Client
+from server import Server
 from utils import Position
 from speed_control import SpeedController
 from auto_reverse import AutoReverseController
 
-class MainWindow:
+class Main:
     def __init__(self):
-        w = Gtk.Window()
-        w.set_default_size(300, 300)
-        self.drawing_area = Gtk.DrawingArea()
-        w.add(self.drawing_area)
-
-        w.connect('destroy', Gtk.main_quit)
-
-        self.drawing_area.connect('draw', self.on_draw)
-        self.drawing_area.set_can_focus(True)
-        self.drawing_area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        self.drawing_area.add_events(Gdk.EventMask.KEY_PRESS_MASK)
-        self.drawing_area.connect('key-press-event', self.on_key_press)
-        self.drawing_area.connect('key-release-event', self.on_key_release)
-        #a.connect('button-press-event', self.OnButtonPress)
-
-        w.show_all()
-
         self.sim_host = "localhost"
         self.service_port = 4000
-        self.service_client = Client(self.sim_host, self.service_port)
-        self.service_client.connect('message', self.on_service_message)
-        self.service_client.connect('connected', self.on_service_connect)
+        self.service_client = Client()
+        self.service_client.msg_fn = self.on_service_message
+        self.service_client.connect_fn = self.on_service_connect
+        self.service_client.create_connection(self.sim_host, self.service_port)
         
         self.motion_client = None
         self.range_client = None
         self.odometry_client = None
+
+        self.server = Server(60212)
+        self.server.connect_fn = self.on_client_connect
+        self.server.msg_fn = self.on_client_msg
+        self.server.close_fn = self.on_client_disconnect
         
         self.throttle = 0
         self.steer = 0
         self.brake = 0
-        
-        self.speed_control = SpeedController(self)
-        
+
         self.current_speed = 0
         self.dodging = False
         
         self.gps = Position()
-        
+        self.mode = 'park'
+        self.speed_control = SpeedController(self)        
         self.reverse_controller = AutoReverseController(self, self.speed_control)
 
     def send_service_message(self, identifier, component, message, data=[]):
-        msg = '%s %s %s %s' % (identifier, component, message, json.dumps(data))
-        self.service_client.send(msg)
+        msg = '%s %s %s %s\n' % (identifier, component, message, json.dumps(data))
+        self.service_client.send_msg(msg)
 
     # the steering value is in radians.
     def send_motion_message(self):
-        logging.info('Sending motion message!')
+        debug('Sending motion message!')
         if self.motion_client is not None:
             # the sign of the throttle is reversed!
             d = {'steer':self.steer, 'force':-self.throttle, 'brake':self.brake}
             line = json.dumps(d) + '\n'
-            self.motion_client.send(line)
+            self.motion_client.send_msg(line)
         else:
-            print 'Cannot send motion message without connection to motion controller.'
+            warning('Cannot send motion message without connection to motion controller.')
 
-    def on_service_connect(self, client):
+    def on_service_connect(self):
+        info("Connected to morse service.")
         self.send_service_message('motion_port', 'simulation', 'get_stream_port', ['hummer.motion'])
         self.send_service_message('range_port', 'simulation', 'get_stream_port', ['hummer.scanner'])
         self.send_service_message('odometry_port', 'simulation', 'get_stream_port', ['hummer.odometry'])
         self.send_service_message('gps_port', 'simulation', 'get_stream_port', ['hummer.gps'])
 
-    def on_service_message(self, client, line):
+    def on_service_message(self, line):
         m = re.match('^(?P<id>\w+) (?P<success>\w+) (?P<data>.*)$', line)
         if m is None:
             warning('Invalid service message:' + line)
@@ -91,32 +81,46 @@ class MainWindow:
         data = m.group('data')
 
         if identifier == 'motion_port':
-            self.motion_client = Client(self.sim_host, int(data))
-            self.motion_client.connect("message", self.on_motion_message)
+            self.motion_client = Client()
+            self.motion_client.create_connection(self.sim_host, int(data))
+            self.motion_client.connect_fn = self.on_motion_connect
+            self.motion_client.msg_fn = self.on_motion_message
 
         elif identifier == 'range_port':
-            self.range_client = Client(self.sim_host, int(data))
-            self.range_client.connect("message", self.on_range_message)
+            self.range_client = Client()
+            self.range_client.create_connection(self.sim_host, int(data))
+            self.range_client.connect_fn = self.on_range_connect
+            self.range_client.msg_fn = self.on_range_message
 
         elif identifier == 'odometry_port':
-            self.odometry_client = Client(self.sim_host, int(data))
-            self.odometry_client.connect("message", self.on_odometry_message)
+            self.odometry_client = Client()
+            self.odometry_client.create_connection(self.sim_host, int(data))
+            self.odometry_client.connect_fn = self.on_odometry_connect
+            self.odometry_client.msg_fn = self.on_odometry_message
         
         elif identifier == 'gps_port':
-            self.gps_client = Client(self.sim_host, int(data))
-            self.gps_client.connect("message", self.on_gps_message)
+            self.gps_client = Client()
+            self.gps_client.create_connection(self.sim_host, int(data))
+            self.gps_client.connect_fn = self.on_gps_connect
+            self.gps_client.msg_fn = self.on_gps_message
         
         else:
             warning("Unhandled identifier:" + identifier)
 
-    def on_motion_message(self, client, line):
+    def on_motion_connect(self):
+        info("Connected to motion port.")
+
+    def on_motion_message(self, line):
         warning("Got unhandled motion message:" + line)
-        
-    def on_range_message(self, client, line):
+
+    def on_range_connect(self):
+        info("Connected to range port.")
+ 
+    def on_range_message(self, line):
         try:
             obj = json.loads(line)
-        except ValueError, e:
-            error('Invalid range message:' + e.message)
+        except ValueError as err:
+            error('Invalid range message:' + str(err))
             return
          
         ranges = obj['range_list']
@@ -131,7 +135,10 @@ class MainWindow:
         
         self.reverse_controller.update_range(min_left, min_middle, min_right)
 
-    def on_odometry_message(self, client, line):
+    def on_odometry_connect(self):
+        info("Connected to odometry port")
+
+    def on_odometry_message(self, line):
         try:
             obj = json.loads(line)
             #print 'Odometry:', obj
@@ -140,110 +147,132 @@ class MainWindow:
             self.current_speed = dS/dt
             self.speed_control.update(self.current_speed, dt)
             self.send_motion_message()
-            self.drawing_area.queue_draw()
+            #self.drawing_area.queue_draw()
+            self.send_state()
                 
-        except ValueError, e:
-            warning('Invalid odometry message:' + e.message)
+        except ValueError as err:
+            warning('Invalid odometry message:' + str(err))
 
-    def on_gps_message(self, client, line):
+    def on_gps_connect(self):
+        info("Connected to gps port.")
+
+    def on_gps_message(self, line):
         try:
             obj = json.loads(line)
             self.gps.x = obj['x']
             self.gps.y = obj['y']
             self.gps.z = obj['z']
             
-        except ValueError, e:
-            warning('Invalid gps message:' + e.message)
-
-    def draw_text_line(self, cr, line_number, text):
-        cr.save()
-        line_height = cr.font_extents()[2] + 2
-        #cr.move_to(10, line_height)
-        cr.translate(0, (line_number+1)*line_height)
-        cr.show_text(text)
-        cr.fill()
-        cr.restore()
-        
-    # cr is the cairo context
-    def on_draw(self, widget, cr):
-        #print dir(cr)
-        #x1, y1, x2, y2 = cr.clip_extents()
-        #width = x2 - x1
-        #height = y2 - y1
-        #print 'Drawing area size:', width, height
- 
-        cr.set_source_rgb(1,1,1)
-        cr.paint()
-    
-        cr.set_source_rgb(0,0,0)
-        cr.set_font_size(16)
-        
-        self.draw_text_line(cr, 0, "Speed: %0.2f" % (self.current_speed))
-        self.draw_text_line(cr, 1, "Steer: %0.2f Throttle: %0.2f Brake: %0.2f" % (self.steer, self.throttle, self.brake))
-        self.draw_text_line(cr, 2, "Target Speed: %0.2f" % (self.speed_control.target_speed))
-        #self.draw_text_line(cr, 3, "Disable forwards: %s Dodging: %s" % (self.disable_forwards, self.dodging))
-        self.draw_text_line(cr, 3, "GPS x=%05.2f y=%05.2f z=%05.2f" % (self.gps.x, self.gps.y, self.gps.z))
-        #cr.move_to(20, 20)
-        #cr.show_text("Speed:" + str(self.last_speed))
-        #cr.move_to(20, 30)
-        
-    def on_key_press(self, w, event):
-        if event.string == 'q' or event.keyval == Gdk.KEY_Escape:
-            Gtk.main_quit()
-
-        elif event.keyval == Gdk.KEY_Left:
-            #print 'Left pressed'
-            if not self.dodging:
-                self.steer = pi/4
-
-        elif event.keyval == Gdk.KEY_Right:
-            #print 'Right pressed'
-            if not self.dodging:
-                self.steer = -pi/4
-
-        elif event.keyval == Gdk.KEY_Up:
-            #print 'Up pressed'
-            self.speed_control.adjust_speed(1.0)
-
-        elif event.keyval == Gdk.KEY_Down:
-            self.speed_control.adjust_speed(-1.0)
-
-        elif event.keyval == Gdk.KEY_space:
-            #print 'Space pressed'
-            self.speed_control.stop()
+        except ValueError as err:
+            warning('Invalid gps message:' + str(err))
             
-        elif event.keyval == Gdk.KEY_a:
-            self.reverse_controller.start()
+    def send_state(self):
+        d = {}
+        d['mode'] = 'drive'
+        d['throttle'] = round(self.throttle, 2)
+        d['brake'] = round(self.brake, 2)
+        d['steer'] = round(self.steer, 2)
+        d['current_speed'] = round(self.current_speed, 2)
+        d['target_speed'] = round(self.speed_control.target_speed, 2)
+        d['current_pos'] = [round(self.gps.x, 2), round(self.gps.y, 2)]
+
+        msg = json.dumps(d) + '\n'
+        self.server.broadcast(msg)
+
+    def on_client_connect(self):
+        info("Client connected.")
         
-        elif event.keyval == Gdk.KEY_s:
-            self.reverse_controller.stop()
+    def on_client_disconnect(self):
+        info("Client disconnected.")
 
-    def on_key_release(self, w, event):
-        if event.keyval == Gdk.KEY_Left:
-            #print 'Left released'
-            self.steer = 0
+    def on_client_msg(self, line):
+        try:
+            d = json.loads(line)
+        except ValueError as err:
+            warning("Invalid client message:" + str(err))
+        
+        if 'stop' in d:
+            self.speed_control.stop()
+        
+        if 'adjust_speed' in d:
+            self.speed_control.adjust_speed(d['adjust_speed'])
+        
+        if 'set_speed' in d:
+            self.speed_control.set_speed(d['set_speed'])
+        
+        if 'steer' in d:
+            self.steer = d['steer']
+        
+        if 'throttle' in d:
+            self.throttle = d['throttle']
+        
+        if 'brake' in d:
+            self.brake = d['brake']
 
-        elif event.keyval == Gdk.KEY_Right:
-            #print 'Right released'
-            self.steer = 0
+        if 'mode' in d:
+            self.mode = d['mode']
 
-        elif event.keyval == Gdk.KEY_Up:
-            #print 'Up released'
-            pass
+#     def on_key_press(self, w, event):
+#         if event.string == 'q' or event.keyval == Gdk.KEY_Escape:
+#             Gtk.main_quit()
+# 
+#         elif event.keyval == Gdk.KEY_Left:
+#             #print 'Left pressed'
+#             if not self.dodging:
+#                 self.steer = pi/4
+# 
+#         elif event.keyval == Gdk.KEY_Right:
+#             #print 'Right pressed'
+#             if not self.dodging:
+#                 self.steer = -pi/4
+# 
+#         elif event.keyval == Gdk.KEY_Up:
+#             #print 'Up pressed'
+#             self.speed_control.adjust_speed(1.0)
+# 
+#         elif event.keyval == Gdk.KEY_Down:
+#             self.speed_control.adjust_speed(-1.0)
+# 
+#         elif event.keyval == Gdk.KEY_space:
+#             #print 'Space pressed'
+#             self.speed_control.stop()
+#             
+#         elif event.keyval == Gdk.KEY_a:
+#             self.reverse_controller.start()
+#         
+#         elif event.keyval == Gdk.KEY_s:
+#             self.reverse_controller.stop()
+# 
+#     def on_key_release(self, w, event):
+#         if event.keyval == Gdk.KEY_Left:
+#             #print 'Left released'
+#             self.steer = 0
+# 
+#         elif event.keyval == Gdk.KEY_Right:
+#             #print 'Right released'
+#             self.steer = 0
+# 
+#         elif event.keyval == Gdk.KEY_Up:
+#             #print 'Up released'
+#             pass
+# 
+#         elif event.keyval == Gdk.KEY_Down:
+#             #print 'Down released'        
+#             pass
 
-        elif event.keyval == Gdk.KEY_Down:
-            #print 'Down released'        
-            pass
-
-    def OnButtonPress(self, w, event):
-        print 'Button press event'
-        #print dir(event)
-        print 'event type = %d, x = %d y = %d' % (event.type, event.x, event.y)
-
+def sigint_handler(signnum, frame):
+    raise asyncore.ExitNow("Exiting")
+    
 if __name__ == '__main__':
     
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
 
-    main_window = MainWindow()
+    signal.signal(signal.SIGINT, sigint_handler)
 
-    Gtk.main()
+    main_window = Main()
+
+    try:
+        asyncore.loop()
+    except asyncore.ExitNow:
+        pass
+    

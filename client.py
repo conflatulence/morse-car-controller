@@ -1,105 +1,54 @@
 
-from gi.repository import GLib
-from gi.repository import Gio
-from gi.repository import GObject
+import asynchat
+import socket
+from logging import error, info, warning
 
-from logging import error, warning, info
+class Client(asynchat.async_chat):
+    def __init__(self, socket=None, connect_fn=None, msg_fn=None, close_fn=None):
+        asynchat.async_chat.__init__(self, socket)
+        
+        self.received_data = bytearray()
+        self.set_terminator(b'\n')
+        self.host = None
+        self.port = None
 
-class Client(GObject.GObject):
+        self.connect_fn = connect_fn
+        self.msg_fn = msg_fn
+        self.close_fn = close_fn
 
-    # as explained in https://developer.gnome.org/pygobject/stable/class-gobject.html#method-gobject--connect
-    # the handler must take an object (in this case Client)
-    # as the first arg, so to handle the message signal the handler should be
-    # def handler(client, line) or
-    # def handler(self, client, line) if the handler is an object method.
-
-    __gsignals__ = {
-        'message':(GObject.SIGNAL_RUN_FIRST, None, (str,)),
-        'connected':(GObject.SIGNAL_RUN_FIRST, None, ()),
-        'disconnected':(GObject.SIGNAL_RUN_FIRST, None, ())
-    }
-
-#    def do_message(self, line):
-#        print 'Message signal:', line.strip()
-
-    def do_connected(self):
-        info("Client connected")
-
-    def do_disconnected(self):
-        info("Client disconnected")
-
-    def __init__(self, host, port):
-        GObject.GObject.__init__(self)
+    def create_connection(self, host, port):
         self.host = host
         self.port = port
-        self.connected = False
-        self.reconnect_period = 5
-        self.socket_client = Gio.SocketClient()
-        self.attempt_connection()
-        self.auto_reconnect = True
+        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect((self.host, self.port))
 
-    def connection_ready(self, source, result, arg):
-        try:
-            self.connection = self.socket_client.connect_to_host_finish(result)
-        except GLib.GError, e:
-            error('Problem connecting to host:' + e.message)
-            if self.auto_reconnect:
-                GLib.timeout_add_seconds(self.reconnect_period, self.reconnect_timeout)
-            return
-
-        self.connected = True
-        self.channel = GLib.IOChannel(self.connection.get_socket().get_fd())
-        conditions = GLib.IOCondition.IN | GLib.IOCondition.ERR | GLib.IOCondition.HUP | GLib.IOCondition.NVAL
-        self.channel.add_watch(conditions, self.data_ready, None)
-        self.emit("connected")
-
-    def attempt_connection(self):
-        cancellable = Gio.Cancellable()
-        self.connection = self.socket_client.connect_to_host_async(
-            self.host, self.port, cancellable, self.connection_ready, None)
-
-    def reconnect_timeout(self):
-        self.attempt_connection()
-        return False
-
-    def handle_disconnect(self):
-        self.connected = False
-        self.emit("disconnected")
-        if self.auto_reconnect:
-            self.attempt_connection()
-
-    def data_ready(self, source, condition, arg):
-        if condition == GLib.IOCondition.IN:
-            line = source.readline()
-            if line is None or len(line) == 0:
-                warning("Client condition IN but not data read.")
-                self.handle_disconnect()
-                return False
-            else:
-                self.emit("message", line)
-
-        elif condition == GLib.IOCondition.HUP:
-            info("Client received HUP")
-            self.handle_disconnect()
-            return False
-
-        elif condition == GLib.IOCondition.NVAL:
-            info("Client received NVAL")
-            self.handle_disconnect()
-            return False
-
+    def handle_connect(self):
+        if self.connect_fn is not None:
+            self.connect_fn()
         else:
-            warning("Client received unknown condition")
-            return False
+            info("Unhandled connect.")
     
-        return True
+    def collect_incoming_data(self, data):
+        self.received_data.extend(data)
 
-    def send(self, line):
-        if not line.endswith('\n'):
-            line = line + '\n'
+    def found_terminator(self):
+        msg = self.received_data.decode()
+        if self.msg_fn is not None:        
+            self.msg_fn(msg)
+        else:
+            info("Unhandled message.")
+        self.received_data.clear()
 
-        try:
-            self.channel.write(line)
-            self.channel.flush()
-        except GLib.GError, e:
-            error('Client send exception:' + e.message)
+    def handle_close(self):
+        self.close()
+        if self.close_fn is not None:
+            self.handle_close_fn()
+        else:
+            info("Unhandled close.")
+
+    def send_msg(self, msg):
+        if not msg.endswith('\n'):
+            msg += '\n'
+        data = msg.encode()
+        self.push(data)
+
