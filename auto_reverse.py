@@ -6,7 +6,7 @@ DODGING = 2
 REVERSING = 3
 TRACKING = 4
 
-from math import pi
+from math import pi, degrees, atan2
 
 class AutoReverseController:
     def __init__(self, controls, speed_control):
@@ -15,16 +15,20 @@ class AutoReverseController:
         self.speed_control = speed_control
         
         self.reverse_speed = 3
+        self.tracking_speed = 3
         self.wander_speed = 3
         self.dodge_turn = pi/4
         self.reverse_turn = pi/4
         self.num_reverse_counts = 10
         
         self.reverse_counter = 0
+
+        self.waypoints = []
+        self.waypoint_index = 0
         
     def start(self):
-        self.state = WANDERING
-        self.speed_control.set_speed(self.wander_speed)
+        self.state = TRACKING
+        self.speed_control.set_speed(self.tracking_speed)
     
     def stop(self):
         self.speed_control.stop()
@@ -32,7 +36,7 @@ class AutoReverseController:
         self.state = WAITING
         
     def update_range(self, left, mid, right):
-        if self.state in (WANDERING, DODGING):
+        if self.state in (WANDERING, DODGING, TRACKING):
             if mid < 4:
                 self.state = REVERSING
                 self.speed_control.set_speed(-self.reverse_speed)
@@ -60,6 +64,11 @@ class AutoReverseController:
             else:
                 self.reverse_counter = 0
                 
-    def update_position(self, position):
-        pass
+    def update_position(self, position, heading):
+        if self.state == TRACKING:
+            # calculate angle to target position.
+            target_position = self.waypoints[self.waypoint_index]
+            target_heading = degrees(atan2(target_position.y - position.y, target_position.x - position.y))
+            
+            
                 

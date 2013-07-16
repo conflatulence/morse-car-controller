@@ -20,7 +20,10 @@ class Client(asynchat.async_chat):
         self.host = host
         self.port = port
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect((self.host, self.port))
+        try:
+            self.connect((self.host, self.port))
+        except ConnectionRefusedError:
+            error("Client failed to connect.")
 
     def handle_connect(self):
         if self.connect_fn is not None:
@@ -42,7 +45,7 @@ class Client(asynchat.async_chat):
     def handle_close(self):
         self.close()
         if self.close_fn is not None:
-            self.handle_close_fn()
+            self.close_fn()
         else:
             info("Unhandled close.")
 

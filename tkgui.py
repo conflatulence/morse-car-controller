@@ -19,14 +19,17 @@ MODE_AUTO='auto'
 
 class CarInterface:
 	def __init__(self, parent):
-		self.parent = parent		
+		self.parent = parent
 
-		self.target_pos = Position()
-		self.current_pos = Position()
+		self.speed = 0
+		self.position = Position()
+
+		self.roll = 0
+		self.pitch = 0
+		self.yaw = 0
 
 		self.target_speed = 0
-		self.current_speed = 0
-
+		self.target_pos = Position()
 		self.mode = MODE_PARK
 
 		self.throttle = 0
@@ -42,9 +45,17 @@ class CarInterface:
 			warning(msg)
 			return
 
-		if 'current_speed' in d:
-			self.current_speed = d['current_speed']
-			self.parent.current_speed.update(self.current_speed)
+		if 'speed' in d:
+			self.speed = d['speed']
+			self.parent.speed.update(self.speed)
+
+		if 'position' in d:
+			self.position.x, self.position.y, self.position.z = d['position']
+			self.parent.position.update((self.position.x, self.position.y, self.position.z))
+
+		if 'orientation' in d:
+			self.roll, self.pitch, self.yaw = d['orientation']
+			self.parent.orientation.update((self.roll, self.pitch, self.yaw))
 		
 		if 'target_speed' in d:
 			self.target_speed = d['target_speed']
@@ -53,26 +64,15 @@ class CarInterface:
 		if 'target_pos' in d:
 			self.target_pos.x, self.target_pos_y = d['target_pos']
 			self.parent.target_pos.update((self.target_pos.x, self.target_pos.y))
-
-		if 'current_pos' in d:
-			self.current_pos.x, self.current_pos.y = d['current_pos']
-			self.parent.current_pos.update((self.current_pos.x, self.current_pos.y))
 		
 		if 'mode' in d:
 			self.mode = d['mode']
 			self.parent.mode.update(self.mode)
 
-		if 'steer' in d:
-			self.steer = d['steer']
-			self.parent.steer.update(self.steer)
-	
-		if 'throttle' in d:
-			self.throttle = d['throttle']
-			self.parent.throttle.update(self.throttle)
+		if 'controls' in d:
+			self.throttle, self.brake, self.steer = d['controls']
+			self.parent.controls.update((self.throttle, self.brake, self.steer))
 
-		if 'brake' in d:
-			self.brake = d['brake']
-			self.parent.brake.update(self.brake)
 
 	def stop(self):
 		s = json.dumps({'stop':0})
@@ -150,68 +150,50 @@ class Application(tk.Frame):
 		lf = tk.Frame(self)
 		lf.pack(expand=False, fill=tk.X)
 
-		# the padding sizes of the labels.
-		vpx = 30
-		vpy = 0
-		gpx = 20
+		self.controls = LabelVar(lf, "Controls", "throttle=%0.2f brake=%0.2f steer=%0.2f", (0,0,0))
 
-		self.throttle = LabelVar(lf, "Throttle", "%0.2f", 0)
-		self.brake = LabelVar(lf, "Brake", "%0.2f", 0)
-		self.steer = LabelVar(lf, "Steer", "%0.2f", 0)
-
-		self.current_speed = LabelVar(lf, "Current Speed", "%0.2f", 0)
-		self.target_speed = LabelVar(lf, "Target Speed", "%0.2f", 0)
-
-		self.target_pos = LabelVar(lf, "Target Pos", "%0.2f, %0.2f", (0,0))
-		self.current_pos = LabelVar(lf, "Current Pos", "%0.2f, %0.2f", (0,0))
-
-		self.mode = LabelVar(lf, "Mode", "%s", "park")
-
-		self.entry_target_x = tk.Entry(lf)
-		self.entry_target_y = tk.Entry(lf)
-		self.button_target_set = tk.Button(lf, text="Set", command=self.target_set_clicked)
-
-		row = 0
-		self.throttle.grid(row=row, column=1, sticky=tk.W)
-		self.brake.grid(row=row, column=2, sticky=tk.W)
-		self.steer.grid(row=row, column=3, sticky=tk.W)
-
-		#self.throttle_label = tk.Label(lf, text="Throttle 0").grid(row=0,column=1, padx=vpx)
-		#self.brake_label = tk.Label(lf, text="Brake 0").grid(row=0,column=2, padx=vpx)
-		#self.steer_label = tk.Label(lf, text="Steer 0").grid(row=0,column=3, padx=vpx)
+		self.speed = LabelVar(lf, "Speed", "%0.2f", 0)
+		self.position = LabelVar(lf, "Position", "x=%0.2f, y=%0.2f z=%0.2f", (0,0, 0))
+		self.orientation = LabelVar(lf, "Orientation", "roll=%0.2f pitch=%0.2f yaw=%0.2f", (0,0,0))
 		
-		row += 1
-		self.target_speed.grid(row=row, column=1, sticky=tk.W)
-		self.current_speed.grid(row=row, column=2, sticky=tk.W)
+		self.target_speed = LabelVar(lf, "Target Speed", "%0.2f", 0)
+		self.target_pos = LabelVar(lf, "Target Pos", "%0.2f, %0.2f", (0,0))
+		
+		self.position.pack(anchor=tk.W)
+		self.orientation.pack(anchor=tk.W)
+		self.speed.pack(anchor=tk.W)
+		self.controls.pack(anchor=tk.W)		
+		self.target_speed.pack(anchor=tk.W)
+		self.target_pos.pack(anchor=tk.W)
 
-		row += 1
-		self.target_pos.grid(row=row, column=1, sticky=tk.W)
-		self.current_pos.grid(row=row, column=2, sticky=tk.W)
+		tf = tk.Frame(lf)
+		tf.pack(expand=False, fill=tk.X)
+		tk.Label(tf, text="Set Target Position").pack(anchor=tk.W, side=tk.LEFT)
 
-		row += 1
-		tk.Label(lf, text="Set Target Pos").grid(row=row, column=0, sticky=tk.W)
-		self.entry_target_x.grid(row=row, column=1, sticky=tk.W)
-		self.entry_target_y.grid(row=row, column=2, sticky=tk.W)
-		self.button_target_set.grid(row=row, column=3, sticky=tk.W)
+		self.entry_target_x = tk.Entry(tf)
+		self.entry_target_y = tk.Entry(tf)
+		self.button_target_set = tk.Button(tf, text="Set", command=self.target_set_clicked)
+		
+		self.entry_target_x.pack(anchor=tk.W, side=tk.LEFT)
+		self.entry_target_y.pack(anchor=tk.W, side=tk.LEFT)
+		self.button_target_set.pack(anchor=tk.W, side=tk.LEFT)
 
-		row += 1
-		self.mode.grid(row=row, column=0, sticky=tk.W)
-
+		tf = tk.Frame(lf)
+		tf.pack(expand=False, fill=tk.X)
+		self.mode = LabelVar(tf, "Mode", "%s", "park")
+		
+		self.mode.pack(anchor=tk.W, side=tk.LEFT)
 		self.mode_var = tk.StringVar()
 		self.mode_var.set(MODE_PARK)
 
-		column = 1
 		for text,mode in [("Park", MODE_PARK),("Drive", MODE_DRIVE),("Auto", MODE_AUTO)]:
-			b = tk.Radiobutton(lf, text=text, variable=self.mode_var,
-					value=mode, command=self.control_mode_changed)
-			b.grid(row=row, column=column)
-			column += 1
+			b = tk.Radiobutton(tf, text=text, variable=self.mode_var, value=mode, command=self.control_mode_changed)
+			b.pack(side=tk.LEFT)
 
-		row += 1
 		self.scroll_lock = tk.IntVar()
 		self.scroll_lock.set(1)
 		self.scroll_lock_button = tk.Checkbutton(lf, text='auto-scroll', variable=self.scroll_lock) 
-		self.scroll_lock_button.grid(row=row, column=0, sticky=tk.W)
+		self.scroll_lock_button.pack(anchor=tk.W)
 
 		#canvas = tk.Canvas(self, background="white")
 		#self.canvas = canvas

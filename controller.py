@@ -7,7 +7,7 @@ import re
 import asyncore
 import signal
 
-from math import pi
+from math import pi, degrees
 
 from client import Client
 from server import Server
@@ -22,6 +22,7 @@ class Main:
         self.service_client = Client()
         self.service_client.msg_fn = self.on_service_message
         self.service_client.connect_fn = self.on_service_connect
+        self.service_client.close_fn = self.on_service_disconnect
         self.service_client.create_connection(self.sim_host, self.service_port)
         
         self.motion_client = None
@@ -32,6 +33,10 @@ class Main:
         self.server.connect_fn = self.on_client_connect
         self.server.msg_fn = self.on_client_msg
         self.server.close_fn = self.on_client_disconnect
+
+        self.roll = 0
+        self.pitch = 0
+        self.yaw = 0
         
         self.throttle = 0
         self.steer = 0
@@ -45,6 +50,9 @@ class Main:
         self.speed_control = SpeedController(self)        
         self.reverse_controller = AutoReverseController(self, self.speed_control)
 
+    def exit(self):
+        raise asyncore.ExitNow("Exiting")
+    
     def send_service_message(self, identifier, component, message, data=[]):
         msg = '%s %s %s %s\n' % (identifier, component, message, json.dumps(data))
         self.service_client.send_msg(msg)
@@ -66,6 +74,11 @@ class Main:
         self.send_service_message('range_port', 'simulation', 'get_stream_port', ['hummer.scanner'])
         self.send_service_message('odometry_port', 'simulation', 'get_stream_port', ['hummer.odometry'])
         self.send_service_message('gps_port', 'simulation', 'get_stream_port', ['hummer.gps'])
+        self.send_service_message('gyro_port', 'simulation', 'get_stream_port', ['hummer.gyroscope'])
+
+    def on_service_disconnect(self):
+        info("Disconnected from morse service.")
+        self.exit()
 
     def on_service_message(self, line):
         m = re.match('^(?P<id>\w+) (?P<success>\w+) (?P<data>.*)$', line)
@@ -85,36 +98,53 @@ class Main:
             self.motion_client.create_connection(self.sim_host, int(data))
             self.motion_client.connect_fn = self.on_motion_connect
             self.motion_client.msg_fn = self.on_motion_message
+            self.motion_client.close_fn = self.on_motion_disconnect
 
         elif identifier == 'range_port':
             self.range_client = Client()
             self.range_client.create_connection(self.sim_host, int(data))
             self.range_client.connect_fn = self.on_range_connect
             self.range_client.msg_fn = self.on_range_message
+            self.range_client.close_fn = self.on_range_disconnect
 
         elif identifier == 'odometry_port':
             self.odometry_client = Client()
             self.odometry_client.create_connection(self.sim_host, int(data))
             self.odometry_client.connect_fn = self.on_odometry_connect
             self.odometry_client.msg_fn = self.on_odometry_message
+            self.odometry_client.close_fn = self.on_odometry_disconnect
         
         elif identifier == 'gps_port':
             self.gps_client = Client()
             self.gps_client.create_connection(self.sim_host, int(data))
             self.gps_client.connect_fn = self.on_gps_connect
             self.gps_client.msg_fn = self.on_gps_message
-        
+            self.gps_client.close_fn = self.on_gps_disconnect
+ 
+        elif identifier == 'gyro_port':
+            self.gyro_client = Client()
+            self.gyro_client.create_connection(self.sim_host, int(data))
+            self.gyro_client.connect_fn = self.on_gyro_connect
+            self.gyro_client.msg_fn = self.on_gyro_message
+            self.gyro_client.close_fn = self.on_gyro_disconnect
+
         else:
             warning("Unhandled identifier:" + identifier)
 
     def on_motion_connect(self):
         info("Connected to motion port.")
+        
+    def on_motion_disconnect(self):
+        info("Disconnected from motion port.")
 
     def on_motion_message(self, line):
         warning("Got unhandled motion message:" + line)
 
     def on_range_connect(self):
         info("Connected to range port.")
+        
+    def on_range_disconnect(self):
+        info("Disconnected from range port.")
  
     def on_range_message(self, line):
         try:
@@ -136,7 +166,10 @@ class Main:
         self.reverse_controller.update_range(min_left, min_middle, min_right)
 
     def on_odometry_connect(self):
-        info("Connected to odometry port")
+        info("Connected to odometry port.")
+        
+    def on_odometry_disconnect(self):
+        info("Disconnected from odometry port.") 
 
     def on_odometry_message(self, line):
         try:
@@ -156,26 +189,49 @@ class Main:
     def on_gps_connect(self):
         info("Connected to gps port.")
 
+    def on_gps_disconnect(self):
+        info("Disconnected from gps port.")
+
     def on_gps_message(self, line):
         try:
             obj = json.loads(line)
             self.gps.x = obj['x']
             self.gps.y = obj['y']
             self.gps.z = obj['z']
+
+            self.reverse_controller.update_position(self.gps, self.yaw)
             
         except ValueError as err:
             warning('Invalid gps message:' + str(err))
+
+    def on_gyro_connect(self):
+        info("Connected to gyro port.")
+
+    def on_gyro_disconnect(self):
+        info("Disconnected from gyro port.")
+    
+    def on_gyro_message(self, line):
+        try:
+            obj = json.loads(line)
+            self.roll = obj['roll']
+            self.pitch = obj['pitch']
+            self.yaw = obj['yaw']
+        except ValueError as err:
+            warning("Invalid gyro message:" + str(err)) 
             
     def send_state(self):
         d = {}
         d['mode'] = 'drive'
-        d['throttle'] = round(self.throttle, 2)
-        d['brake'] = round(self.brake, 2)
-        d['steer'] = round(self.steer, 2)
-        d['current_speed'] = round(self.current_speed, 2)
+        d['controls'] = [round(self.throttle, 2),
+                         round(self.brake, 2),
+                         round(self.steer, 2)]
+        d['speed'] = round(self.current_speed, 2)
+        d['position'] = [round(self.gps.x, 2), round(self.gps.y, 2), round(self.gps.z, 2)]
+        d['orientation'] = [round(degrees(self.roll), 2),
+                            round(degrees(self.pitch), 2),
+                            round(degrees(self.yaw), 2)]
         d['target_speed'] = round(self.speed_control.target_speed, 2)
-        d['current_pos'] = [round(self.gps.x, 2), round(self.gps.y, 2)]
-
+        
         msg = json.dumps(d) + '\n'
         self.server.broadcast(msg)
 
@@ -211,54 +267,6 @@ class Main:
 
         if 'mode' in d:
             self.mode = d['mode']
-
-#     def on_key_press(self, w, event):
-#         if event.string == 'q' or event.keyval == Gdk.KEY_Escape:
-#             Gtk.main_quit()
-# 
-#         elif event.keyval == Gdk.KEY_Left:
-#             #print 'Left pressed'
-#             if not self.dodging:
-#                 self.steer = pi/4
-# 
-#         elif event.keyval == Gdk.KEY_Right:
-#             #print 'Right pressed'
-#             if not self.dodging:
-#                 self.steer = -pi/4
-# 
-#         elif event.keyval == Gdk.KEY_Up:
-#             #print 'Up pressed'
-#             self.speed_control.adjust_speed(1.0)
-# 
-#         elif event.keyval == Gdk.KEY_Down:
-#             self.speed_control.adjust_speed(-1.0)
-# 
-#         elif event.keyval == Gdk.KEY_space:
-#             #print 'Space pressed'
-#             self.speed_control.stop()
-#             
-#         elif event.keyval == Gdk.KEY_a:
-#             self.reverse_controller.start()
-#         
-#         elif event.keyval == Gdk.KEY_s:
-#             self.reverse_controller.stop()
-# 
-#     def on_key_release(self, w, event):
-#         if event.keyval == Gdk.KEY_Left:
-#             #print 'Left released'
-#             self.steer = 0
-# 
-#         elif event.keyval == Gdk.KEY_Right:
-#             #print 'Right released'
-#             self.steer = 0
-# 
-#         elif event.keyval == Gdk.KEY_Up:
-#             #print 'Up released'
-#             pass
-# 
-#         elif event.keyval == Gdk.KEY_Down:
-#             #print 'Down released'        
-#             pass
 
 def sigint_handler(signnum, frame):
     raise asyncore.ExitNow("Exiting")

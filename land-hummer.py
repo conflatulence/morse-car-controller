@@ -19,6 +19,9 @@ hummer.append(odometry)
 gps = GPS()
 hummer.append(gps)
 
+gyroscope = Gyroscope()
+hummer.append(gyroscope)
+
 #scanner = Sick()
 scanner = Hokuyo()
 scanner.translate(0, 2.5, 0)
@@ -40,6 +43,8 @@ scanner.add_interface("socket")
 scanner.add_service("socket")
 gps.add_interface("socket")
 gps.add_service("socket")
+gyroscope.add_interface("socket")
+gyroscope.add_service("socket")
 
 #env = Environment('indoors-1/indoor-1')
 env = Environment('land-1/trees', fastmode=True)
