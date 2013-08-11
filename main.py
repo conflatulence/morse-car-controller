@@ -7,13 +7,67 @@ import re
 import asyncore
 import signal
 
-from math import pi, degrees
-
 from client import Client
 from server import Server
-from utils import Position
+from utils import recursive_round
 from speed_control import SpeedController
-from auto_reverse import AutoReverseController
+from collision_control import CollisionController
+#from waypoint_control import WaypointController
+
+class VehicleControls:
+    def __init__(self):
+        self.throttle = 0
+        self.brake = 0
+        self.steer = 0
+        
+    def status(self):
+        d= {}
+        d['throttle'] = self.throttle
+        d['brake'] = self.brake
+        d['steer'] = self.steer
+        return d
+        
+class VehicleState:
+    def __init__(self):
+        self.roll = 0
+        self.pitch = 0
+        self.yaw = 0
+        
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        
+        self.speed = 0
+        
+        self.time = 0
+    
+    def update_time(self, dt):
+        self.time += dt
+    
+    def update_gps(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
+    
+    def update_odometry(self, dS, dt):
+        self.speed = dS/dt
+
+    def update_gyro(self, roll, pitch, yaw):
+        self.roll = roll
+        self.pitch = pitch
+        self.yaw = yaw
+
+    def status(self):
+        d = {}
+        d['roll'] = self.roll
+        d['pitch'] = self.pitch
+        d['yaw'] = self.yaw
+        d['x'] = self.x
+        d['y'] = self.y
+        d['z'] = self.z
+        d['speed'] = self.speed
+        d['time'] = self.time
+        return d
 
 class Main:
     def __init__(self):
@@ -29,26 +83,22 @@ class Main:
         self.range_client = None
         self.odometry_client = None
 
-        self.server = Server(60212)
-        self.server.connect_fn = self.on_client_connect
-        self.server.msg_fn = self.on_client_msg
-        self.server.close_fn = self.on_client_disconnect
+        self.status_server = Server(60212)
+        self.status_server.connect_fn = self.on_status_client_connect
+        self.status_server.msg_fn = self.on_status_client_msg
+        self.status_server.close_fn = self.on_status_client_disconnect
 
-        self.roll = 0
-        self.pitch = 0
-        self.yaw = 0
-        
-        self.throttle = 0
-        self.steer = 0
-        self.brake = 0
+        self.command_server = Server(60213)
+        self.command_server.connect_fn = self.on_command_client_connect
+        self.command_server.msg_fn = self.on_command_client_msg
+        self.command_server.close_fn = self.on_command_client_disconnect
 
-        self.current_speed = 0
-        self.dodging = False
-        
-        self.gps = Position()
-        self.mode = 'park'
-        self.speed_control = SpeedController(self)        
-        self.reverse_controller = AutoReverseController(self, self.speed_control)
+        self.controls = VehicleControls()
+        self.state = VehicleState()
+       
+        self.speed_control = SpeedController(self.state, self.controls)        
+        self.collision_control = CollisionController(self.state, self.controls, self.speed_control)
+        #self.waypoint_control = WaypointController(self.state, self.collision_control)
 
     def exit(self):
         raise asyncore.ExitNow("Exiting")
@@ -62,7 +112,7 @@ class Main:
         debug('Sending motion message!')
         if self.motion_client is not None:
             # the sign of the throttle is reversed!
-            d = {'steer':self.steer, 'force':-self.throttle, 'brake':self.brake}
+            d = {'steer':self.controls.steer, 'force':-self.controls.throttle, 'brake':self.controls.brake}
             line = json.dumps(d) + '\n'
             self.motion_client.send_msg(line)
         else:
@@ -149,21 +199,10 @@ class Main:
     def on_range_message(self, line):
         try:
             obj = json.loads(line)
+            self.collision_control.update_range(obj['range_list'])
         except ValueError as err:
             error('Invalid range message:' + str(err))
             return
-         
-        ranges = obj['range_list']
-        N = len(ranges)
-        
-        if min(ranges) < 0:
-            warning('Range message was less than 0 (%d)' % (min(ranges)))
-
-        min_left = min(ranges[0:int(N/3)])
-        min_middle = min(ranges[int(N/3):int(2*N/3)])
-        min_right = min(ranges[int(2*N/3):N])
-        
-        self.reverse_controller.update_range(min_left, min_middle, min_right)
 
     def on_odometry_connect(self):
         info("Connected to odometry port.")
@@ -174,14 +213,14 @@ class Main:
     def on_odometry_message(self, line):
         try:
             obj = json.loads(line)
-            #print 'Odometry:', obj
+
             dS = obj['dS']
             dt = 0.1
-            self.current_speed = dS/dt
-            self.speed_control.update(self.current_speed, dt)
+            self.state.update_time(dt)
+            self.state.update_odometry(dS, dt)
+            self.speed_control.update()
             self.send_motion_message()
-            #self.drawing_area.queue_draw()
-            self.send_state()
+            self.send_status()
                 
         except ValueError as err:
             warning('Invalid odometry message:' + str(err))
@@ -195,12 +234,8 @@ class Main:
     def on_gps_message(self, line):
         try:
             obj = json.loads(line)
-            self.gps.x = obj['x']
-            self.gps.y = obj['y']
-            self.gps.z = obj['z']
-
-            self.reverse_controller.update_position(self.gps, self.yaw)
-            
+            self.state.update_gps(obj['x'], obj['y'], obj['z'])
+            # TODO: update the waypoing controller here?
         except ValueError as err:
             warning('Invalid gps message:' + str(err))
 
@@ -213,60 +248,82 @@ class Main:
     def on_gyro_message(self, line):
         try:
             obj = json.loads(line)
-            self.roll = obj['roll']
-            self.pitch = obj['pitch']
-            self.yaw = obj['yaw']
+            self.state.update_gyro(obj['roll'], obj['pitch'], obj['yaw'])
         except ValueError as err:
             warning("Invalid gyro message:" + str(err)) 
             
-    def send_state(self):
+    def send_status(self):
         d = {}
-        d['mode'] = 'drive'
-        d['controls'] = [round(self.throttle, 2),
-                         round(self.brake, 2),
-                         round(self.steer, 2)]
-        d['speed'] = round(self.current_speed, 2)
-        d['position'] = [round(self.gps.x, 2), round(self.gps.y, 2), round(self.gps.z, 2)]
-        d['orientation'] = [round(degrees(self.roll), 2),
-                            round(degrees(self.pitch), 2),
-                            round(degrees(self.yaw), 2)]
-        d['target_speed'] = round(self.speed_control.target_speed, 2)
+        d['state'] = self.state.status()
+        d['controls'] = self.controls.status()
+        d['speed_control'] = self.speed_control.status()
+        d['collision_control'] = self.collision_control.status()
+        #d['waypoint_control'] = self.waypoint_control.status()
         
-        msg = json.dumps(d) + '\n'
-        self.server.broadcast(msg)
+        msg = json.dumps(recursive_round(d,4)) + '\n'
+        self.status_server.broadcast(msg)
 
-    def on_client_connect(self):
-        info("Client connected.")
+    def on_status_client_connect(self):
+        info("Status client connected.")
         
-    def on_client_disconnect(self):
-        info("Client disconnected.")
+    def on_status_client_disconnect(self):
+        info("Status client disconnected.")
 
-    def on_client_msg(self, line):
+    def on_status_client_msg(self, line):
+        warning("Status client received message, but no messages are supported.")
+    
+    def on_command_client_connect(self):
+        info("Command client connected.")
+        
+    def on_command_client_disconnect(self):
+        info("Command client disconnected.")
+
+    def on_command_client_msg(self, line):
         try:
             d = json.loads(line)
         except ValueError as err:
-            warning("Invalid client message:" + str(err))
+            warning("Client message is not valid JSON:" + str(err))
+            return
         
-        if 'stop' in d:
-            self.speed_control.stop()
-        
-        if 'adjust_speed' in d:
-            self.speed_control.adjust_speed(d['adjust_speed'])
-        
-        if 'set_speed' in d:
-            self.speed_control.set_speed(d['set_speed'])
-        
-        if 'steer' in d:
-            self.steer = d['steer']
-        
-        if 'throttle' in d:
-            self.throttle = d['throttle']
-        
-        if 'brake' in d:
-            self.brake = d['brake']
+        try:
+            action, class_name, field_name, params = d
+        except IndexError:
+            warning("Invalid message:" + str(d))
+            return
+    
+        if action == 'set':
+            try:
+                inst = getattr(self, class_name)
+                if callable(getattr(inst, field_name)):
+                    warning("Invalid message attempted to set a callable object.")
+                    return
+                setattr(inst, field_name, params)
+            except AttributeError as err:
+                warning("Invalid message recipient:" + str(err))
+                return
+            
+        elif action == 'call':
+            try:
+                inst = getattr(self, class_name)
+                func = getattr(inst, field_name)
+            except AttributeError as err:
+                warning("Invalid message recipient:" + str(err))
+                return
 
-        if 'mode' in d:
-            self.mode = d['mode']
+            if not callable(func):
+                warning("Invalid messaged attempted to call a non-callable object.")
+                return
+            
+            if type(params) is list:
+                func(*params)
+            elif type(params) is dict:
+                func(**params)
+            else:
+                warning("Invalid message params:" + str(params))
+                return
+        else:
+            warning("Unknown action:" + action)
+            return
 
 def sigint_handler(signnum, frame):
     raise asyncore.ExitNow("Exiting")
@@ -277,7 +334,7 @@ if __name__ == '__main__':
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    main_window = Main()
+    main = Main()
 
     try:
         asyncore.loop()

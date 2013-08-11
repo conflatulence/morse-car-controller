@@ -2,7 +2,8 @@
 from utils import clamp
 
 class SpeedController:
-    def __init__(self, controls):
+    def __init__(self, state, controls):
+        self.vstate = state
         self.controls = controls
         self.target_speed = 0
         self.stopping = False
@@ -14,6 +15,8 @@ class SpeedController:
         
         self.throttle = 0
         self.brake = 0
+        
+        self.last_update_time = 0
         
     def stop(self):
         self.stopping = True
@@ -30,7 +33,9 @@ class SpeedController:
     def adjust_speed(self, amount):
         self.set_speed(self.target_speed + amount) 
 
-    def update(self, current_speed, dt):        
+    def update(self):
+        current_speed = self.vstate.speed
+        dt = self.vstate.time - self.last_update_time
         assert(current_speed >= 0)
         
         if self.stopping and abs(current_speed) < 0.1:
@@ -59,4 +64,10 @@ class SpeedController:
         
         self.controls.throttle = throttle
         self.controls.brake = brake
-    
+
+    def status(self):
+        d = {}
+        d['target'] = self.target_speed
+        d['integral'] = self.last_integral
+        d['error'] = self.last_error
+        return d
