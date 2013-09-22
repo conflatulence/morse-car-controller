@@ -1,60 +1,53 @@
 
-from math import atan2, sqrt, degrees
+from math import atan2, sqrt, pi
 
 class WaypointController:
     def __init__(self, state, controller):
         self.state = state
         self.controller = controller
-        self.remaining = []
-        self.next = None
-        self.pos = None
-        self.distance = -1
-        self.direction = 0
+        self.points = []
+        self.dist = 0
+        self.dir = 0
+        self.enabled = False
         
-    def add(self, points):
-        self.remaining += points
-        if self.next is None:
-            self.next = self.remaining.pop(0)
+    def add_points(self, points):
+        self.points += points
     
-    def clear(self):
-        self.remaining = []
-        self.next = None
+    def clear_points(self):
+        self.points = []
 
-    def update(self, pos):
-        self.pos = pos
-        self.distance = self.get_distance()
-        self.direction = self.get_direction()
+    def update(self):
+        if not self.enabled:
+            return
+        
+        if len(self.points) > 0:
+            x,y = self.points[0]
+            self.dist = self.distance(x, y)
+            self.dir = self.direction(x, y)
+            if self.distance < 2:
+                self.points.pop(0)
+            elif self.controller.blocked:
+                self.controller.set_steer(-pi/3)
+                self.controller.set_speed(-3)
+            else:
+                self.controller.set_heading(self.dir)
+                self.controller.set_speed(3)
+        else:
+            self.controller.stop()
 
     def status(self):
         d = {}
-        if self.position is not None:
-            d['position'] = (self.pos.x, self.pos.y)
-
-        if self.next is not None:
-            d['next'] = (self.next.x, self.next.y)
-        
-        d['distance'] = self.distance,
-        d['direction'] = degrees(self.direction) 
-        
+        d['enabled'] = self.enabled
+        d['points'] = self.points
+        d['distance'] = self.distance
+        d['direction'] = self.direction
         return d
 
-    # return the distance to the next waypoint.
-    def get_distance(self, pos=None):
-        if pos is None:
-            pos = self.pos
-            
-        if self.next is not None:
-            return sqrt((self.next.x - pos.x)**2 + (self.next.y - pos.y)**2)
-        else:
-            return -1
-
-    # return the direction to the next waypoint.
-    def get_direction(self, pos=None):
-        if pos is None:
-            pos = self.pos
-            
-        if self.next is not None:
-            return atan2(self.next.y - pos.y, self.next.x - pos.x)
-        else:
-            return -1
+    # distance to point x,y
+    def distance(self, x, y):
+        return sqrt((x - self.state.x)**2 + (y - self.state.y)**2)
+ 
+    # direction to point x,y
+    def direction(self, x, y):
+        return atan2(y - self.state.y, x - self.state.x)
         

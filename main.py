@@ -9,16 +9,21 @@ import signal
 
 from client import Client
 from server import Server
-from utils import recursive_round
+from utils import recursive_round, clamp
 from speed_control import SpeedController
 from collision_control import CollisionController
-#from waypoint_control import WaypointController
+from waypoint_control import WaypointController
+
+from math import pi
 
 class VehicleControls:
     def __init__(self):
         self.throttle = 0
         self.brake = 0
         self.steer = 0
+        
+    def set_steer(self, val):
+        self.steer = clamp(-pi/4, pi/4, val)
         
     def status(self):
         d= {}
@@ -98,7 +103,7 @@ class Main:
        
         self.speed_control = SpeedController(self.state, self.controls)        
         self.collision_control = CollisionController(self.state, self.controls, self.speed_control)
-        #self.waypoint_control = WaypointController(self.state, self.collision_control)
+        self.waypoint_control = WaypointController(self.state, self.collision_control)
 
     def exit(self):
         raise asyncore.ExitNow("Exiting")
@@ -235,7 +240,7 @@ class Main:
         try:
             obj = json.loads(line)
             self.state.update_gps(obj['x'], obj['y'], obj['z'])
-            # TODO: update the waypoing controller here?
+            self.waypoint_control.update()
         except ValueError as err:
             warning('Invalid gps message:' + str(err))
 
@@ -249,6 +254,7 @@ class Main:
         try:
             obj = json.loads(line)
             self.state.update_gyro(obj['roll'], obj['pitch'], obj['yaw'])
+            self.collision_control.update_heading()
         except ValueError as err:
             warning("Invalid gyro message:" + str(err)) 
             
@@ -314,10 +320,13 @@ class Main:
                 warning("Invalid messaged attempted to call a non-callable object.")
                 return
             
+            # should catch exception here? e.g wrong number of args...
             if type(params) is list:
                 func(*params)
             elif type(params) is dict:
                 func(**params)
+            elif type(params) in (float,int,str):
+                func(params)
             else:
                 warning("Invalid message params:" + str(params))
                 return

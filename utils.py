@@ -1,4 +1,6 @@
 
+from math import pi
+
 class Position:
     def __init__(self, x=0, y=0, z=0):
         self.x = x
@@ -11,6 +13,13 @@ def clamp(min_val, max_val, val):
     if val > max_val:
         return max_val
     return val
+
+def wrap_radians(v):
+    while v >= pi:
+        v -= 2*pi
+    while v < -pi:
+        v += 2*pi
+    return v
 
 def recursive_round(d, n):
     if type(d) is float:

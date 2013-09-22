@@ -40,8 +40,8 @@ class SpeedController:
         
         if self.stopping and abs(current_speed) < 0.1:
             self.stopping = False
-                
-        if self.stopping:
+        
+        if self.stopping or self.target_speed == 0:
             integral = 0
             error = 0
             throttle = 0

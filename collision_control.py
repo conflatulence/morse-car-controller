@@ -1,24 +1,11 @@
 
-
-CLEAR = 0
-DODGING = 1
-BLOCKED = 2
-
-# steer_modes
-# AUTO_STEER means the controller will track some heading, and attempt
-# to veer away from the heading when obstacles appear.
-# MANUAL_STEER means the controller will simple stop the car if it is
-# heading towards and obstacle, and not modify the steering.
-# MANUAL_STEER is useful for doing maneuvers like reverse turn.
-AUTO_STEER = 0
-MANUAL_STEER = 1
-
 from random import random
 from math import pi
+from utils import wrap_radians
 
 class CollisionController:
     def __init__(self, state, controls, speed_control):
-        self.vehicle_state = state
+        self.vstate = state
         self.controls = controls
         self.speed_control = speed_control
 
@@ -26,7 +13,8 @@ class CollisionController:
         self.target_heading = 0
         self.target_speed = 0
 
-        self.state = CLEAR
+        self.blocked = False
+        self.dodging = False
         self.dodge_turn = pi/4
 
         self.Kp = 1.0
@@ -40,43 +28,55 @@ class CollisionController:
         return (min_left, min_middle, min_right)
         
     def update_range(self, ranges):
-        
         left, mid, right = self.range_mins(ranges)
         
         if self.auto_steer:
-            if mid < 4 and left < 4 and right < 4:
+            m = 4
+            if mid < m and left < m and right < m:
                 self.speed_control.stop()
-                self.state = BLOCKED 
+                self.blocked = True
+                self.dodging = False
             else:
-                if left < 4  and right > 4:
-                    self.controls.steer = self.dodge_turn
-                    self.state = DODGING
-                elif right < 4 and left > 4:
-                    self.controls.steer = -self.dodge_turn
-                    self.state = DODGING
-                elif left > 4 and right > 4:
-                    if random() > 0.5:
-                        self.controls.steer = -self.dodge_turn
-                    else:
-                        self.controls.steer = -self.dodge_turn
-                    self.state = DODGING
-                else:
-                    self.state = CLEAR
-                    # leave steering alone, the heading update will set it.
+                self.blocked = False
+                self.dodging = False
+                if left < m  and right > m:
+                    self.controls.set_steer(self.dodge_turn)
+                    self.dodging = True
+                elif right < m and left > m:
+                    self.controls.set_steer(-self.dodge_turn)
+                    self.dodging = True
+                elif mid < m and left > m and right > m:
+                    self.controls.set_steer(self.dodge_turn if random() > 0.5 else -self.dodge_turn)
+                    self.dodging = True
 
-    def set_target_heading(self, target_heading):
-        self.target_heading = target_heading
-                
-    def update_heading(self, heading):
+    def set_steer(self, angle):
+        self.auto_steer = False
+        self.controls.set_steer(angle)
         
-        if self.auto_steer and self.state == CLEAR:
-            self.controls.steer = self.Kp*(heading - self.target_heading)
+    def set_speed(self, speed):
+        if speed < 0 or (speed > 0 and not self.blocked):
+            self.speed_control.set_speed(speed)
     
-        self.last_heading = heading
+    def adjust_speed(self, amount):
+        speed = self.target_speed + amount
+        self.set_speed(speed)
+    
+    def stop(self):
+        self.speed_control.stop()
+
+    def set_heading(self, heading):
+        self.target_heading = heading
+        self.auto_steer = True
+
+    def update_heading(self):
+        heading = self.vstate.yaw
+        if self.auto_steer and not self.dodging:
+            self.controls.set_steer(self.Kp*(wrap_radians(heading - self.target_heading)))
     
     def status(self):
         d = {}
-        d['state'] = self.state
+        d['blocked'] = self.blocked
+        d['dodging'] = self.dodging
         d['auto_steer'] = self.auto_steer
         d['target_heading'] = self.target_heading
         return d
