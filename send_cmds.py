@@ -6,6 +6,11 @@ import socket
 import json
 
 def set_type(s):
+
+    s = s.strip()
+    if len(s) == 0:
+        return []
+
     try:
         v = float(s)
         return v
@@ -17,7 +22,7 @@ def set_type(s):
     elif s.lower() == 'false':
         return False
     
-    return s.strip()
+    return s
 
 def argparse(s):
     if '=' in s:
@@ -42,7 +47,8 @@ if __name__ == '__main__':
         f = sys.stdin
 
     sock = socket.create_connection(("localhost", 60213))
-    
+    sockf = sock.makefile()    
+
     for line in f:
         line = line.strip()
         if line.startswith('#') or len(line) == 0:
@@ -58,8 +64,9 @@ if __name__ == '__main__':
 
             args = argparse(rem)
             msg = json.dumps([action, component, field, args]) + '\n'
-            print('Sending:'+ msg.strip())
+            print('Sending: '+ msg.strip())
             sock.send(msg.encode())
+            print('Received: ' + sockf.readline())
         except IndexError as err:
             print(err)
         except ValueError as err:
