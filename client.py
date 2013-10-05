@@ -27,7 +27,7 @@ class Client(asynchat.async_chat):
 
     def handle_connect(self):
         if self.connect_fn is not None:
-            self.connect_fn()
+            self.connect_fn(self)
         else:
             info("Unhandled connect.")
     
@@ -37,7 +37,7 @@ class Client(asynchat.async_chat):
     def found_terminator(self):
         msg = self.received_data.decode()
         if self.msg_fn is not None:        
-            self.msg_fn(msg)
+            self.msg_fn(self, msg)
         else:
             info("Unhandled message.")
         self.received_data.clear()
@@ -45,7 +45,7 @@ class Client(asynchat.async_chat):
     def handle_close(self):
         self.close()
         if self.close_fn is not None:
-            self.close_fn()
+            self.close_fn(self)
         else:
             info("Unhandled close.")
 

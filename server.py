@@ -27,7 +27,7 @@ class Server(asyncore.dispatcher):
         self.clients.append(new_client)
 
         if self.connect_fn is not None:
-            self.connect_fn()
+            self.connect_fn(new_client)
         
     def broadcast(self, msg):
         for client in self.clients:

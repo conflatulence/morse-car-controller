@@ -123,7 +123,7 @@ class Main:
         else:
             warning('Cannot send motion message without connection to motion controller.')
 
-    def on_service_connect(self):
+    def on_service_connect(self, client):
         info("Connected to morse service.")
         self.send_service_message('motion_port', 'simulation', 'get_stream_port', ['hummer.motion'])
         self.send_service_message('range_port', 'simulation', 'get_stream_port', ['hummer.scanner'])
@@ -131,11 +131,11 @@ class Main:
         self.send_service_message('gps_port', 'simulation', 'get_stream_port', ['hummer.gps'])
         self.send_service_message('gyro_port', 'simulation', 'get_stream_port', ['hummer.gyroscope'])
 
-    def on_service_disconnect(self):
+    def on_service_disconnect(self, client):
         info("Disconnected from morse service.")
         self.exit()
 
-    def on_service_message(self, line):
+    def on_service_message(self, client, line):
         m = re.match('^(?P<id>\w+) (?P<success>\w+) (?P<data>.*)$', line)
         if m is None:
             warning('Invalid service message:' + line)
@@ -186,22 +186,22 @@ class Main:
         else:
             warning("Unhandled identifier:" + identifier)
 
-    def on_motion_connect(self):
+    def on_motion_connect(self, client):
         info("Connected to motion port.")
         
-    def on_motion_disconnect(self):
+    def on_motion_disconnect(self, client):
         info("Disconnected from motion port.")
 
-    def on_motion_message(self, line):
+    def on_motion_message(self, client, line):
         warning("Got unhandled motion message:" + line)
 
-    def on_range_connect(self):
+    def on_range_connect(self, client):
         info("Connected to range port.")
         
-    def on_range_disconnect(self):
+    def on_range_disconnect(self, client):
         info("Disconnected from range port.")
  
-    def on_range_message(self, line):
+    def on_range_message(self, client, line):
         try:
             obj = json.loads(line)
             self.collision_control.update_range(obj['range_list'])
@@ -209,13 +209,13 @@ class Main:
             error('Invalid range message:' + str(err))
             return
 
-    def on_odometry_connect(self):
+    def on_odometry_connect(self, client):
         info("Connected to odometry port.")
         
-    def on_odometry_disconnect(self):
+    def on_odometry_disconnect(self, client):
         info("Disconnected from odometry port.") 
 
-    def on_odometry_message(self, line):
+    def on_odometry_message(self, client, line):
         try:
             obj = json.loads(line)
 
@@ -230,13 +230,13 @@ class Main:
         except ValueError as err:
             warning('Invalid odometry message:' + str(err))
 
-    def on_gps_connect(self):
+    def on_gps_connect(self, client):
         info("Connected to gps port.")
 
-    def on_gps_disconnect(self):
+    def on_gps_disconnect(self, client):
         info("Disconnected from gps port.")
 
-    def on_gps_message(self, line):
+    def on_gps_message(self, client, line):
         try:
             obj = json.loads(line)
             self.state.update_gps(obj['x'], obj['y'], obj['z'])
@@ -244,13 +244,13 @@ class Main:
         except ValueError as err:
             warning('Invalid gps message:' + str(err))
 
-    def on_gyro_connect(self):
+    def on_gyro_connect(self, client):
         info("Connected to gyro port.")
 
-    def on_gyro_disconnect(self):
+    def on_gyro_disconnect(self, client):
         info("Disconnected from gyro port.")
     
-    def on_gyro_message(self, line):
+    def on_gyro_message(self, client, line):
         try:
             obj = json.loads(line)
             self.state.update_gyro(obj['roll'], obj['pitch'], obj['yaw'])
@@ -269,43 +269,43 @@ class Main:
         msg = json.dumps(recursive_round(d,4)) + '\n'
         self.status_server.broadcast(msg)
 
-    def on_status_client_connect(self):
+    def on_status_client_connect(self, client):
         info("Status client connected.")
         
-    def on_status_client_disconnect(self):
+    def on_status_client_disconnect(self, client):
         info("Status client disconnected.")
 
-    def on_status_client_msg(self, line):
+    def on_status_client_msg(self, client, line):
         warning("Status client received message, but no messages are supported.")
     
-    def on_command_client_connect(self):
+    def on_command_client_connect(self, client):
         info("Command client connected.")
         
-    def on_command_client_disconnect(self):
+    def on_command_client_disconnect(self, client):
         info("Command client disconnected.")
 
-    def on_command_client_msg(self, line):
+    def on_command_client_msg(self, client, line):
         try:
             d = json.loads(line)
         except ValueError as err:
-            warning("Client message is not valid JSON:" + str(err))
+            client.send_msg("ERROR: Client message is not valid JSON:" + str(err))
             return
         
         try:
             action, class_name, field_name, params = d
         except IndexError:
-            warning("Invalid message:" + str(d))
+            client.send_msg("ERROR: Invalid message:" + str(d))
             return
     
         if action == 'set':
             try:
                 inst = getattr(self, class_name)
                 if callable(getattr(inst, field_name)):
-                    warning("Invalid message attempted to set a callable object.")
+                    client.send_msg("ERROR: Invalid message attempted to set a callable object.")
                     return
                 setattr(inst, field_name, params)
             except AttributeError as err:
-                warning("Invalid message recipient:" + str(err))
+                client.send_msg("ERROR: Invalid message recipient:" + str(err))
                 return
             
         elif action == 'call':
@@ -313,11 +313,11 @@ class Main:
                 inst = getattr(self, class_name)
                 func = getattr(inst, field_name)
             except AttributeError as err:
-                warning("Invalid message recipient:" + str(err))
+                client.send_msg("ERROR: Invalid message recipient:" + str(err))
                 return
 
             if not callable(func):
-                warning("Invalid messaged attempted to call a non-callable object.")
+                warning("ERROR: Invalid messaged attempted to call a non-callable object.")
                 return
             
             # should catch exception here? e.g wrong number of args...
@@ -328,11 +328,13 @@ class Main:
             elif type(params) in (float,int,str):
                 func(params)
             else:
-                warning("Invalid message params:" + str(params))
+                client.send_msg("ERROR: Invalid message params:" + str(params))
                 return
         else:
-            warning("Unknown action:" + action)
+            client.send_msg("ERROR: Unknown action:" + action)
             return
+        
+        client.send_msg("OK")
 
 def sigint_handler(signnum, frame):
     raise asyncore.ExitNow("Exiting")
