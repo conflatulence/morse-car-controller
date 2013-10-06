@@ -18,6 +18,9 @@ class CollisionController:
         self.dodge_turn = pi/4
 
         self.Kp = 1.0
+
+        self.last_steer_error = 0
+
  
     def range_mins(self, ranges):
         N = len(ranges)
@@ -71,7 +74,8 @@ class CollisionController:
     def update_heading(self):
         heading = self.vstate.yaw
         if self.auto_steer and not self.dodging:
-            self.controls.set_steer(self.Kp*(wrap_radians(heading - self.target_heading)))
+            self.last_steer_error = wrap_radians(self.target_heading - heading)
+            self.controls.set_steer(self.Kp*self.last_steer_error)
     
     def status(self):
         d = {}
@@ -79,4 +83,5 @@ class CollisionController:
         d['dodging'] = self.dodging
         d['auto_steer'] = self.auto_steer
         d['target_heading'] = self.target_heading
+        d['steer_error'] = self.last_steer_error
         return d
