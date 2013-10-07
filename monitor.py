@@ -84,6 +84,7 @@ class TimePlot:
         #self.widget.setTitle(self.name)
         self.widget.insertLegend(Qwt.QwtLegend(), Qwt.QwtPlot.BottomLegend);     
  
+        self.lines = lines
         self.curves = {}
         self.data = {}
 
@@ -91,26 +92,34 @@ class TimePlot:
         grid.attach(self.widget)
         grid.setPen(Qt.QPen(Qt.Qt.black, 0, Qt.Qt.DotLine))
 
-        self.first_update = True
-        self.n = 0
-
-        # in seconds, the amount of time on the x-axis.
-        self.window = 30.0
-        # the size of the shift (in seconds) when current time reaches the rhs of the graph.
-        self.jump = 10.0
-        # how close to the rhs before most recent sample must be before a shift occurs.
-        self.jump_threshold = 0.1
-        # how many samples to extend the arrays by when they run out of entries.
-        self.extra_samples = 512
-
         self.t = np.zeros(0)
-        for var, color in lines:
+        
+        for var, color in self.lines:
             self.data[var] = np.zeros(0)
             c = Qwt.QwtPlotCurve(var)
             c.setPen(Qt.QPen(color))
             c.attach(self.widget)
             self.curves[var] = c
 
+        # in seconds, the amount of time on the x-axis.
+        self.window = 90.0
+        # the size of the shift (in seconds) when current time reaches the rhs of the graph.
+        self.jump = 10.0
+        # how close to the rhs before most recent sample must be before a shift occurs.
+        self.jump_threshold = 0.1
+        # how many samples to extend the arrays by when they run out of entries.
+        self.extra_samples = 512
+        
+        self.first_update = True
+
+    def reset(self):
+        self.first_update = True
+        self.n = 0
+
+        self.t = np.zeros(0)
+        for var in self.data:
+            self.data[var] = np.zeros(0)
+    
     def update_plot(self, new_t, new_vals):
 
         if self.first_update:            
@@ -302,6 +311,10 @@ class MainWindow(Qt.QWidget):
             plot.update(msg)
         #self.csv.update(msg)
 
+    def clear(self):
+        for p in self.plots:
+            p.reset()
+
     def keyPressEvent(self, e):
         if e.key() == Qt.Qt.Key_Escape:
             self.close()
@@ -310,6 +323,8 @@ class MainWindow(Qt.QWidget):
                 self.paused = False
             else:
                 self.paused = True
+        elif e.key() == Qt.Qt.Key_C:
+            self.clear()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
