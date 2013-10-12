@@ -217,7 +217,12 @@ class ThrottlePlot(TimePlot):
 
 class SpeedPlot(TimePlot):
     def __init__(self):
-        lines = (('speed', Qt.Qt.red),('target_speed', Qt.Qt.blue))
+        lines = (
+                 ('speed', Qt.Qt.red),
+                 ('target_speed', Qt.Qt.green),
+                 ('error', Qt.Qt.blue)
+                 #('integral', Qt.Qt.magenta)
+                 )
         TimePlot.__init__(self, 'Speed', lines)
     
     def update(self, msg):
@@ -226,6 +231,8 @@ class SpeedPlot(TimePlot):
             t = msg[u'state'][u'time']
             v['speed'] = msg[u'state'][u'speed']
             v['target_speed'] = msg[u'speed_control'][u'target']
+            #v['integral'] = msg[u'speed_control'][u'integral']
+            v['error'] = msg[u'speed_control'][u'error']
         except KeyError as err:
             error("Invalid message %s", err)
         else:
