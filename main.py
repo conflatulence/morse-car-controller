@@ -320,16 +320,16 @@ class Main:
                 warning("ERROR: Invalid messaged attempted to call a non-callable object.")
                 return
             
-            # should catch exception here? e.g wrong number of args...
-            if type(params) is list:
-                func(*params)
-            elif type(params) is dict:
-                func(**params)
-            elif type(params) in (float,int,str):
-                func(params)
-            else:
-                client.send_msg("ERROR: Invalid message params:" + str(params))
-                return
+            try:
+                if type(params) is list:
+                    func(*params)
+                elif type(params) is dict:
+                    func(**params)
+                else:
+                    client.send_msg("ERROR: Invalid message params:" + str(params))
+                    return
+            except Exception as err:
+                client.send_msg("ERROR: Call message caused an exception:" + err)
         else:
             client.send_msg("ERROR: Unknown action:" + action)
             return
