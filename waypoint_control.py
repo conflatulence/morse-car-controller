@@ -6,14 +6,20 @@ class WaypointController:
         self.state = state
         self.controller = controller
         self.points = []
-        self.dist = 0
-        self.dir = 0
+        self.last_distance = 0
+        self.last_direction = 0
         self.enabled = False
-        
-    def add_points(self, points):
+        self.forward_speed = 2
+        self.reverse_speed = 2
+        self.reverse_turn = pi/3
+    
+    def add_waypoint(self, x, y):
+        self.points.append((x,y))
+    
+    def add_waypoints(self, points):
         self.points += points
     
-    def clear_points(self):
+    def clear_waypoints(self):
         self.points = []
 
     def update(self):
@@ -22,16 +28,19 @@ class WaypointController:
         
         if len(self.points) > 0:
             x,y = self.points[0]
-            self.dist = self.distance(x, y)
-            self.dir = self.direction(x, y)
-            if self.distance < 2:
+            distance = self.calc_distance(x, y)
+            direction = self.calc_direction(x, y)
+            if distance < 2:
                 self.points.pop(0)
             elif self.controller.blocked:
-                self.controller.set_steer(-pi/3)
-                self.controller.set_speed(-3)
+                self.controller.set_steer(-self.reverse_turn)
+                self.controller.set_speed(-self.reverse_speed)
             else:
-                self.controller.set_heading(self.dir)
-                self.controller.set_speed(3)
+                self.controller.set_heading(direction)
+                self.controller.set_speed(self.forward_speed)
+            self.last_distance = distance
+            self.last_direction = direction
+            
         else:
             self.controller.stop()
 
@@ -39,15 +48,15 @@ class WaypointController:
         d = {}
         d['enabled'] = self.enabled
         d['points'] = self.points
-        d['distance'] = self.distance
-        d['direction'] = self.direction
+        d['distance'] = self.last_distance
+        d['direction'] = self.last_direction
         return d
 
     # distance to point x,y
-    def distance(self, x, y):
+    def calc_distance(self, x, y):
         return sqrt((x - self.state.x)**2 + (y - self.state.y)**2)
  
     # direction to point x,y
-    def direction(self, x, y):
-        return atan2(y - self.state.y, x - self.state.x)
+    def calc_direction(self, x, y):
+        return atan2(-(x - self.state.x), y - self.state.y)
         

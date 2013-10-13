@@ -264,7 +264,7 @@ class Main:
         d['controls'] = self.controls.status()
         d['speed_control'] = self.speed_control.status()
         d['collision_control'] = self.collision_control.status()
-        #d['waypoint_control'] = self.waypoint_control.status()
+        d['waypoint_control'] = self.waypoint_control.status()
         
         msg = json.dumps(recursive_round(d,4)) + '\n'
         self.status_server.broadcast(msg)
