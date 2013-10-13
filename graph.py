@@ -299,7 +299,7 @@ class MainWindow(Qt.QWidget):
         self.paused = False
 
         #self.csv = CsvLogger('log.csv')
-        self.msglog = open('msglog.txt', 'w')
+        #self.msglog = open('msglog.txt', 'w')
     
         self.connection = Connection('localhost', 60212, self.update)
 
@@ -309,7 +309,7 @@ class MainWindow(Qt.QWidget):
 
     def update(self, msg):
         #print msg,
-        print >>self.msglog, msg
+        #print >>self.msglog, msg
         if self.paused:
             # just discard the messages ... do something smarter in the future?
             return
