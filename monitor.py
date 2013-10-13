@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-# based on Qwt-5.0.0/examples/data_plot
-#!/usr/bin/env python
-
 import sys
 import json
 import logging
@@ -201,14 +198,9 @@ class MainWindow(Qt.QWidget):
         self.add_display(CollisionControlDisplay(), 4, 0)
         self.add_display(SteeringControlDisplay(), 5, 0)
         self.add_display(WaypointDisplay(), 6, 0)
-        #self.add_plot(ThrottlePlot(), 0, 0)
-        #self.add_plot(SpeedPlot(), 1, 0)
-        #self.add_plot(SteerPlot(), 3, 0)
-        #self.add_plot(CollisionPlot(), 4, 0)
 
         self.paused = False
 
-        #self.csv = CsvLogger('log.csv')
         self.msglog = open('msglog.txt', 'w')
     
         self.connection = Connection('localhost', 60212, self.update)
@@ -218,19 +210,12 @@ class MainWindow(Qt.QWidget):
         self.grid.addWidget(p, row, col)
 
     def update(self, msg):
-        #print msg,
-        #print >>self.msglog, msg
+        print >>self.msglog, msg
         if self.paused:
-            # just discard the messages ... do something smarter in the future?
             return
         
         for display in self.displays:
             display.update_msg(msg)
-        #self.csv.update(msg)
-
-    def clear(self):
-        for p in self.plots:
-            p.reset()
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Qt.Key_Escape:
