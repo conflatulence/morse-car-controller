@@ -102,9 +102,9 @@ class TimePlot:
             self.curves[var] = c
 
         # in seconds, the amount of time on the x-axis.
-        self.window = 90.0
+        self.window = 120.0
         # the size of the shift (in seconds) when current time reaches the rhs of the graph.
-        self.jump = 10.0
+        self.jump = 30.0
         # how close to the rhs before most recent sample must be before a shift occurs.
         self.jump_threshold = 0.1
         # how many samples to extend the arrays by when they run out of entries.
