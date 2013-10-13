@@ -49,7 +49,6 @@ class Connection:
 
             self.update_fn(obj)
 
-
 arrow_points = (
     Qt.QPoint(-1, -4),
     Qt.QPoint(1, -4),
@@ -118,7 +117,7 @@ class XYPlot(Qt.QWidget):
         qp.begin(self)
 
         qp.translate(self.offset_x, self.offset_y)           
-        qp.scale(self.s, self.s)
+        qp.scale(self.s, -self.s)
 
         #qp.translate(200, 200)
 
@@ -147,23 +146,23 @@ class XYPlot(Qt.QWidget):
 class MapPlot(XYPlot):
     def __init__(self):
         XYPlot.__init__(self)
-        self.g = PlotGroup()
-        self.g.symbol = 'cross'
-        self.g.color = Qt.Qt.blue
-        self.add_plot_group(self.g)
 
         self.current_pos = PlotGroup(color=Qt.Qt.blue, symbol='arrow')
         self.add_plot_group(self.current_pos)
+
+        self.waypoint_group = PlotGroup(color=Qt.Qt.black, symbol='cross')
+        self.add_plot_group(self.waypoint_group)
     
     def on_msg(self, msg):
-        v = {}
         try:
             #t = msg[u'state'][u'time']
             current = (msg[u'state'][u'x'], msg[u'state'][u'y'], degrees(msg[u'state'][u'yaw']))
+            waypoints = msg[u'waypoint_control'][u'points']
         except KeyError:
             logging.error("Invalid message.")
         else:
             self.current_pos.data = [current]
+            self.waypoint_group.data = waypoints
             self.update()
 
 class MainWindow(Qt.QWidget):
