@@ -1,0 +1,10 @@
+2013-10-13
+----------
+
+Separate steering control from collision control.
+
+It would just make more sense. Currently the steering control is hidden in the collision control. The steering control gets the target heading and current heading and does feedback control.
+
+The tricky part appears to be priority over the steering command. Both waypoint control and collision control will attempt to override the steering from time to time. The collision control should override the waypoint control.
+
+Maybe it won't... the waypoint control only overrides the steering when the collision control is 'blocked' so hmmm maybe the problem is avoided. The issue of command priority is still there because currently the waypoint controller is checking if the collision control is dodging before messing with the steering.
