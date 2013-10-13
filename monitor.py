@@ -64,6 +64,11 @@ class Display(Qt.QWidget):
         vbox = Qt.QVBoxLayout()
         self.setLayout(vbox)
         
+        p = self.palette()
+        p.setColor(self.backgroundRole(), Qt.Qt.white)
+        self.setPalette(p)
+        self.setAutoFillBackground(True)
+        
         self.name_label = Qt.QLabel(text=name)
         self.data_label = Qt.QLabel(text="--")
         
@@ -76,7 +81,7 @@ class Display(Qt.QWidget):
         font.setPointSize(12)
         self.name_label.setFont(font)
         
-        font.setPointSize(24)
+        font.setPointSize(20)
         self.data_label.setFont(font)
         
         vbox.addWidget(self.name_label)
@@ -87,7 +92,7 @@ class Display(Qt.QWidget):
 
 class OrientationDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Roll/Pitch/Yaw (degrees)')
+        Display.__init__(self, 'State Roll/Pitch/Yaw (degrees)')
 
     def update_msg(self, msg):
         try:
@@ -101,7 +106,7 @@ class OrientationDisplay(Display):
 
 class PositionDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'X/Y/Z')
+        Display.__init__(self, 'State X/Y/Z')
 
     def update_msg(self, msg):
         try:
@@ -115,7 +120,7 @@ class PositionDisplay(Display):
 
 class ControlsDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Throttle/Brake/Steering (Steering in degrees)')
+        Display.__init__(self, 'Controls Throttle/Brake/Steering (Steering in degrees)')
 
     def update_msg(self, msg):
         try:
@@ -129,7 +134,7 @@ class ControlsDisplay(Display):
 
 class SpeedControlDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Target/Error/Integral')
+        Display.__init__(self, 'Speed Control Target/Error/Integral')
 
     def update_msg(self, msg):
         try:
@@ -139,88 +144,47 @@ class SpeedControlDisplay(Display):
         except KeyError as err:
             error("Invalid message %s", err)
         else:
-            self.update_display("%6.2f %6.2f %9.2f" % (target, error, integral))
+            self.update_display("%6.2f %6.2f %6.2f" % (target, error, integral))
 
+class CollisionControlDisplay(Display):
+    def __init__(self):
+        Display.__init__(self, 'Collision Control Blocked/Dodging/AutoSteer')
 
-# class ThrottlePlot(TimePlot):
-#     def __init__(self):
-#         lines = (('throttle', Qt.Qt.red),('brake', Qt.Qt.blue))
-#         TimePlot.__init__(self, 'Throttle', lines)
-# 
-#     def update(self, msg):
-#         v = {}
-#         try:
-#             t = msg[u'state'][u'time']
-#             v['throttle'] = msg[u'controls'][u'throttle']
-#             v['brake'] = msg[u'controls'][u'brake']
-#         except KeyError as err:
-#             error("Invalid message %s", err)
-#         else:
-#             self.update_plot(t, v)
-# 
-# class SpeedPlot(TimePlot):
-#     def __init__(self):
-#         lines = (
-#                  ('speed', Qt.Qt.red),
-#                  ('target_speed', Qt.Qt.green),
-#                  ('error', Qt.Qt.blue)
-#                  #('integral', Qt.Qt.magenta)
-#                  )
-#         TimePlot.__init__(self, 'Speed', lines)
-#     
-#     def update(self, msg):
-#         v = {}
-#         try:
-#             t = msg[u'state'][u'time']
-#             v['speed'] = msg[u'state'][u'speed']
-#             v['target_speed'] = msg[u'speed_control'][u'target']
-#             #v['integral'] = msg[u'speed_control'][u'integral']
-#             v['error'] = msg[u'speed_control'][u'error']
-#         except KeyError as err:
-#             error("Invalid message %s", err)
-#         else:
-#             self.update_plot(t, v)
-# 
-# class SteerPlot(TimePlot):
-#     def __init__(self):
-#         lines = (
-#                  ('steer', Qt.Qt.red),
-#                  ('heading', Qt.Qt.blue),
-#                  ('target_heading', Qt.Qt.green),
-#                  ('steer_error', Qt.Qt.magenta)
-#                  )
-#         TimePlot.__init__(self, 'Steering', lines)
-# 
-#     def update(self, msg):
-#         v = {}
-#         try:
-#             t = msg[u'state'][u'time']
-#             v['steer'] = msg[u'controls'][u'steer']
-#             v['heading'] = msg[u'state'][u'yaw']
-#             v['target_heading'] = msg[u'collision_control'][u'target_heading']
-#             v['steer_error'] = msg[u'collision_control'][u'steer_error']
-#         except KeyError as err:
-#             error("Invalid message %s", err)                
-#         else:
-#             self.update_plot(t, v)
-# 
-# class CollisionPlot(TimePlot):
-#     def __init__(self):
-#         lines = (('blocked', Qt.Qt.red), ('dodging', Qt.Qt.blue), ('auto_steer', Qt.Qt.green))
-#         TimePlot.__init__(self, 'Collision', lines)
-# 
-#     def update(self, msg):
-#         v = {}
-#         try:
-#             t = msg[u'state'][u'time']
-#             v['blocked'] = msg[u'collision_control'][u'blocked']
-#             v['dodging'] = msg[u'collision_control'][u'dodging']
-#             v['auto_steer'] = msg[u'collision_control'][u'auto_steer']
-#         except KeyError as err:
-#             error("Invalid message %s", err)                
-#         else:
-#             self.update_plot(t,v)
+    def update_msg(self, msg):
+        try:
+            blocked = msg[u'collision_control'][u'blocked']
+            dodging = msg[u'collision_control'][u'dodging']
+            auto_steer = msg[u'collision_control'][u'auto_steer']
+        except KeyError as err:
+            error("Invalid message %s", err)
+        else:
+            self.update_display("%s %s %s" % (blocked, dodging, auto_steer))
 
+class SteeringControlDisplay(Display):
+    def __init__(self):
+        Display.__init__(self, 'Steering Control TargetHeading/SteeringError')
+
+    def update_msg(self, msg):
+        try:
+            target_heading = msg[u'collision_control'][u'target_heading']
+            steer_error = msg[u'collision_control'][u'steer_error']
+        except KeyError as err:
+            error("Invalid message %s", err)
+        else:
+            self.update_display("%6.2f %6.2f" % (degrees(target_heading), degrees(steer_error)))
+
+class WaypointDisplay(Display):
+    def __init__(self):
+        Display.__init__(self, 'Waypoint Control Distance/Direction')
+
+    def update_msg(self, msg):
+        try:
+            distance = msg[u'waypoint_control'][u'distance']
+            direction = msg[u'waypoint_control'][u'direction']
+        except KeyError as err:
+            error("Invalid message %s", err)
+        else:
+            self.update_display("%6.2f %6.2f" % (distance, degrees(direction)))
 
 class MainWindow(Qt.QWidget):
     def __init__(self):
@@ -234,6 +198,9 @@ class MainWindow(Qt.QWidget):
         self.add_display(PositionDisplay(), 1, 0)
         self.add_display(ControlsDisplay(), 2, 0)
         self.add_display(SpeedControlDisplay(), 3, 0)
+        self.add_display(CollisionControlDisplay(), 4, 0)
+        self.add_display(SteeringControlDisplay(), 5, 0)
+        self.add_display(WaypointDisplay(), 6, 0)
         #self.add_plot(ThrottlePlot(), 0, 0)
         #self.add_plot(SpeedPlot(), 1, 0)
         #self.add_plot(SteerPlot(), 3, 0)
