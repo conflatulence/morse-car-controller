@@ -145,26 +145,26 @@ class SpeedControlDisplay(Display):
 
 class CollisionControlDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Collision Control Blocked/Dodging/AutoSteer')
+        Display.__init__(self, 'Collision Control Blocked/Dodging/Enabled')
 
     def update_msg(self, msg):
         try:
             blocked = msg[u'collision_control'][u'blocked']
             dodging = msg[u'collision_control'][u'dodging']
-            auto_steer = msg[u'collision_control'][u'auto_steer']
+            enabled = msg[u'collision_control'][u'enabled']
         except KeyError as err:
             error("Invalid message %s", err)
         else:
-            self.update_display("%s %s %s" % (blocked, dodging, auto_steer))
+            self.update_display("%s %s %s" % (blocked, dodging, enabled))
 
 class SteeringControlDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Steering Control TargetHeading/SteeringError')
+        Display.__init__(self, 'Steering Control TargetHeading/HeadingError')
 
     def update_msg(self, msg):
         try:
-            target_heading = msg[u'collision_control'][u'target_heading']
-            steer_error = msg[u'collision_control'][u'steer_error']
+            target_heading = msg[u'steering_control'][u'target_heading']
+            steer_error = msg[u'steering_control'][u'heading_error']
         except KeyError as err:
             error("Invalid message %s", err)
         else:

@@ -2,9 +2,9 @@
 from math import atan2, sqrt, pi
 
 class WaypointController:
-    def __init__(self, state, controller):
+    def __init__(self, state, collision_control):
         self.state = state
-        self.controller = controller
+        self.collision_control = collision_control
         self.points = []
         self.last_distance = 0
         self.last_direction = 0
@@ -32,17 +32,17 @@ class WaypointController:
             direction = self.calc_direction(x, y)
             if distance < 2:
                 self.points.pop(0)
-            elif self.controller.blocked:
-                self.controller.set_steer(-self.reverse_turn)
-                self.controller.set_speed(-self.reverse_speed)
+            elif self.collision_control.blocked:
+                self.collision_control.set_steer(-self.reverse_turn)
+                self.collision_control.set_speed(-self.reverse_speed)
             else:
-                self.controller.set_heading(direction)
-                self.controller.set_speed(self.forward_speed)
+                self.collision_control.set_heading(direction)
+                self.collision_control.set_speed(self.forward_speed)
             self.last_distance = distance
             self.last_direction = direction
             
         else:
-            self.controller.stop()
+            self.collision_control.stop()
 
     def status(self):
         d = {}

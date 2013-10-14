@@ -11,6 +11,7 @@ from client import Client
 from server import Server
 from utils import recursive_round, clamp
 from speed_control import SpeedController
+from steering_control import SteeringController
 from collision_control import CollisionController
 from waypoint_control import WaypointController
 
@@ -102,8 +103,10 @@ class Main:
         self.state = VehicleState()
        
         self.speed_control = SpeedController(self.state, self.controls)        
-        self.collision_control = CollisionController(self.state, self.controls, self.speed_control)
+        self.steering_control = SteeringController(self.state, self.controls)
+        self.collision_control = CollisionController(self.state, self.speed_control, self.steering_control)
         self.waypoint_control = WaypointController(self.state, self.collision_control)
+
 
     def exit(self):
         raise asyncore.ExitNow("Exiting")
@@ -254,7 +257,7 @@ class Main:
         try:
             obj = json.loads(line)
             self.state.update_gyro(obj['roll'], obj['pitch'], obj['yaw'])
-            self.collision_control.update_heading()
+            self.steering_control.update_heading()
         except ValueError as err:
             warning("Invalid gyro message:" + str(err)) 
             
@@ -263,6 +266,7 @@ class Main:
         d['state'] = self.state.status()
         d['controls'] = self.controls.status()
         d['speed_control'] = self.speed_control.status()
+        d['steering_control'] = self.steering_control.status()
         d['collision_control'] = self.collision_control.status()
         d['waypoint_control'] = self.waypoint_control.status()
         

@@ -244,7 +244,7 @@ class SteerPlot(TimePlot):
                  ('steer', Qt.Qt.red),
                  ('heading', Qt.Qt.blue),
                  ('target_heading', Qt.Qt.green),
-                 ('steer_error', Qt.Qt.magenta)
+                 ('heading_error', Qt.Qt.magenta)
                  )
         TimePlot.__init__(self, 'Steering', lines)
 
@@ -254,8 +254,8 @@ class SteerPlot(TimePlot):
             t = msg[u'state'][u'time']
             v['steer'] = msg[u'controls'][u'steer']
             v['heading'] = msg[u'state'][u'yaw']
-            v['target_heading'] = msg[u'collision_control'][u'target_heading']
-            v['steer_error'] = msg[u'collision_control'][u'steer_error']
+            v['target_heading'] = msg[u'steering_control'][u'target_heading']
+            v['heading_error'] = msg[u'steering_control'][u'heading_error']
         except KeyError as err:
             error("Invalid message %s", err)                
         else:
@@ -263,7 +263,8 @@ class SteerPlot(TimePlot):
 
 class CollisionPlot(TimePlot):
     def __init__(self):
-        lines = (('blocked', Qt.Qt.red), ('dodging', Qt.Qt.blue), ('auto_steer', Qt.Qt.green))
+        #lines = (('blocked', Qt.Qt.red), ('dodging', Qt.Qt.blue), ('auto_steer', Qt.Qt.green))
+        lines = (('blocked', Qt.Qt.red), ('dodging', Qt.Qt.blue))
         TimePlot.__init__(self, 'Collision', lines)
 
     def update(self, msg):
@@ -272,7 +273,7 @@ class CollisionPlot(TimePlot):
             t = msg[u'state'][u'time']
             v['blocked'] = msg[u'collision_control'][u'blocked']
             v['dodging'] = msg[u'collision_control'][u'dodging']
-            v['auto_steer'] = msg[u'collision_control'][u'auto_steer']
+            #v['auto_steer'] = msg[u'collision_control'][u'auto_steer']
         except KeyError as err:
             error("Invalid message %s", err)                
         else:

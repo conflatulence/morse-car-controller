@@ -4,24 +4,18 @@ from math import pi
 from utils import wrap_radians
 
 class CollisionController:
-    def __init__(self, state, controls, speed_control):
+    def __init__(self, state, speed_control, steering_control):
         self.vstate = state
-        self.controls = controls
         self.speed_control = speed_control
-
-        self.auto_steer = True
-        self.target_heading = 0
-        self.target_speed = 0
+        self.steering_control = steering_control
 
         self.blocked = False
         self.dodging = False
         self.dodge_turn = pi/4
+        self.obstacle_range = 4 
 
-        self.Kp = 1.0
+        self.enabled = True
 
-        self.last_steer_error = 0
-
- 
     def range_mins(self, ranges):
         N = len(ranges)
         min_left = min(ranges[0:int(N/3)])
@@ -32,56 +26,54 @@ class CollisionController:
         
     def update_range(self, ranges):
         left, mid, right = self.range_mins(ranges)
-        
-        if self.auto_steer:
-            m = 4
+    
+        if self.speed_control.target_speed > 0:
+            m = self.obstacle_range
             if mid < m and left < m and right < m:
                 self.speed_control.stop()
                 self.blocked = True
                 self.dodging = False
             else:
-                self.blocked = False
-                self.dodging = False
                 if left < m  and right > m:
-                    self.controls.set_steer(self.dodge_turn)
+                    self.steering_control.set_steer(self.dodge_turn)
+                    self.blocked = False                    
                     self.dodging = True
                 elif right < m and left > m:
-                    self.controls.set_steer(-self.dodge_turn)
+                    self.steering_control.set_steer(-self.dodge_turn)
+                    self.blocked = False
                     self.dodging = True
-                elif mid < m and left > m and right > m:
-                    self.controls.set_steer(self.dodge_turn if random() > 0.5 else -self.dodge_turn)
+                elif mid < m and left > m and right > m: # maybe should turn harder in this case.
+                    self.steering_control.set_steer(self.dodge_turn if random() > 0.5 else -self.dodge_turn)
+                    self.blocked = False                    
                     self.dodging = True
+                else:
+                    self.blocked = False
+                    self.dodging = False
+                    self.steering_control.enabled = True
 
     def set_steer(self, angle):
-        self.auto_steer = False
-        self.controls.set_steer(angle)
-        
+        # allow manual external steering control in reverse.
+        if not self.enabled or self.speed_control.target_speed <= 0:        
+            self.steering_control.set_steer(angle)
+
     def set_speed(self, speed):
-        if speed < 0 or (speed > 0 and not self.blocked):
+        if not self.enabled or speed < 0 or (speed > 0 and not self.blocked):
             self.speed_control.set_speed(speed)
     
     def adjust_speed(self, amount):
-        speed = self.target_speed + amount
+        speed = self.speed_control.target_speed + amount
         self.set_speed(speed)
     
     def stop(self):
         self.speed_control.stop()
 
     def set_heading(self, heading):
-        self.target_heading = heading
-        self.auto_steer = True
-
-    def update_heading(self):
-        heading = self.vstate.yaw
-        if self.auto_steer and not self.dodging:
-            self.last_steer_error = wrap_radians(self.target_heading - heading)
-            self.controls.set_steer(self.Kp*self.last_steer_error)
+        # the steering control won't be enabled here, it needs explicit enable=True
+        self.steering_control.set_heading(heading)
     
     def status(self):
         d = {}
+        d['enabled'] = self.enabled
         d['blocked'] = self.blocked
         d['dodging'] = self.dodging
-        d['auto_steer'] = self.auto_steer
-        d['target_heading'] = self.target_heading
-        d['steer_error'] = self.last_steer_error
         return d
