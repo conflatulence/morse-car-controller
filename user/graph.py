@@ -14,46 +14,7 @@ from PyQt4 import Qt
 import PyQt4.Qwt5 as Qwt
 import PyQt4.Qwt5.anynumpy as np
 
-class Connection:
-    def __init__(self, host, port, update_fn):
-        self.host = host
-        self.port = port
-        self.update_fn = update_fn
-
-        self.sock = Qt.QTcpSocket()
-        self.sock.connected.connect(self.connected)
-        self.sock.disconnected.connect(self.disconnected)
-        self.sock.error.connect(self.socket_error)
-        self.sock.readyRead.connect(self.data_ready)
-        self.retry_delay_ms = 2000
-        self.connect()
-
-    def connect(self):
-        info("Attempting to connect.")
-        self.sock.connectToHost(self.host, self.port)
-
-    def connected(self):
-        info('Connected to host!')
-
-    def disconnected(self):
-        info("Disconnected from host!")
-        Qt.QTimer.singleShot(self.retry_delay_ms, self.connect)
-
-    def socket_error(self):
-        warning("Socket error")
-        Qt.QTimer.singleShot(self.retry_delay_ms, self.connect)
-
-    def data_ready(self):
-        if self.sock.canReadLine():
-            line = str(self.sock.readLine())
-            
-            try:
-                obj = json.loads(line)
-            except ValueError as err:
-                warning("Received invalid json: %s" % str(err))
-                return
-
-            self.update_fn(obj)
+from connection import Connection
 
 class CsvLogger:
     def __init__(self, fname):
@@ -287,15 +248,13 @@ class MainWindow(Qt.QWidget):
         self.grid = Qt.QGridLayout()
         self.setLayout(self.grid)
         self.plots = []
+        self.next_row = 0
 
-        if False:
-            self.add_plot(TestPlot(), 0, 0)
-        else:
-            self.add_plot(ThrottlePlot(), 0, 0)
-            self.add_plot(SpeedPlot(), 1, 0)
-            self.add_plot(OrientationPlot(), 2, 0)
-            self.add_plot(SteerPlot(), 3, 0)
-            self.add_plot(CollisionPlot(), 4, 0)
+        self.add_plot(ThrottlePlot())
+        self.add_plot(SpeedPlot())
+        #self.add_plot(OrientationPlot())
+        self.add_plot(SteerPlot())
+        self.add_plot(CollisionPlot())
 
         self.paused = False
 
@@ -304,9 +263,10 @@ class MainWindow(Qt.QWidget):
     
         self.connection = Connection('localhost', 60212, self.update)
 
-    def add_plot(self, p, row, col):
+    def add_plot(self, p):
         self.plots.append(p)
-        self.grid.addWidget(p.widget, row, col)
+        self.grid.addWidget(p.widget, self.next_row, 0)
+        self.next_row += 1
 
     def update(self, msg):
         #print msg,
