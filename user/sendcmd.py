@@ -51,7 +51,7 @@ if __name__ == '__main__':
             msg = json.dumps([action, component, field, args]) + '\n'
             print('Sending: '+ msg.strip())
             sock.send(msg.encode())
-            print('Received: ' + sockf.readline())
+            print('Received: ' + sockf.readline().strip())
         except IndexError as err:
             print(err)
         except ValueError as err:
