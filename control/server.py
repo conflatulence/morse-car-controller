@@ -6,28 +6,34 @@ from client import Client
 
 class Server(asyncore.dispatcher):
 
-    def __init__(self, port, host="localhost"):
+    def __init__(self, port, connect_fn=None, msg_fn=None, close_fn=None):
         asyncore.dispatcher.__init__(self)
         self.create_socket()
         self.set_reuse_addr()
-        self.bind((host, port))
+        self.bind(('localhost', port))
         self.listen(5)
 
-        self.connect_fn = None
-        self.msg_fn = None
-        self.close_fn = None
+        self.client_connect_fn = connect_fn
+        self.client_msg_fn = msg_fn
+        self.client_close_fn = close_fn
 
         self.clients = []
 
     def handle_accepted(self, sock, addr):
-        new_client = Client(sock)
-        new_client.msg_fn = self.msg_fn
-        new_client.close_fn = self.close_fn
+        client = Client(sock)
+        client.msg_fn = self.client_msg_fn
+        client.close_fn = self.client_close
         
-        self.clients.append(new_client)
+        self.clients.append(client)
 
-        if self.connect_fn is not None:
-            self.connect_fn(new_client)
+        if self.client_connect_fn:
+            self.client_connect_fn(client)
+
+    def client_close(self, client):
+        self.clients.remove(client)
+
+        if self.client_close_fn:
+            self.client_close_fn(client)
         
     def broadcast(self, msg):
         for client in self.clients:
