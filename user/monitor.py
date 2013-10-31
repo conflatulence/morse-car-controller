@@ -105,7 +105,7 @@ class SpeedControlDisplay(Display):
 
 class CollisionControlDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Collision Control Blocked/Dodging/Enabled')
+        Display.__init__(self, 'Collision Control Enabled/Blocked/Dodging')
 
     def update_msg(self, msg):
         try:
@@ -115,33 +115,35 @@ class CollisionControlDisplay(Display):
         except KeyError as err:
             error("Invalid message %s", err)
         else:
-            self.update_display("%s %s %s" % (blocked, dodging, enabled))
+            self.update_display("%s %s %s" % (enabled, blocked, dodging))
 
 class SteeringControlDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Steering Control TargetHeading/HeadingError')
+        Display.__init__(self, 'Steering Control Enabled/TargetHeading/HeadingError')
 
     def update_msg(self, msg):
         try:
+            enabled = msg[u'steering_control'][u'enabled']
             target_heading = msg[u'steering_control'][u'target_heading']
             steer_error = msg[u'steering_control'][u'heading_error']
         except KeyError as err:
             error("Invalid message %s", err)
         else:
-            self.update_display("%6.2f %6.2f" % (degrees(target_heading), degrees(steer_error)))
+            self.update_display("%s %6.2f %6.2f" % (enabled, degrees(target_heading), degrees(steer_error)))
 
 class WaypointDisplay(Display):
     def __init__(self):
-        Display.__init__(self, 'Waypoint Control Distance/Direction')
+        Display.__init__(self, 'Waypoint Control Enabled/Distance/Direction')
 
     def update_msg(self, msg):
         try:
+            enabled = msg[u'waypoint_control'][u'enabled']
             distance = msg[u'waypoint_control'][u'distance']
             direction = msg[u'waypoint_control'][u'direction']
         except KeyError as err:
             error("Invalid message %s", err)
         else:
-            self.update_display("%6.2f %6.2f" % (distance, degrees(direction)))
+            self.update_display("%s %6.2f %6.2f" % (enabled, distance, degrees(direction)))
 
 class MainWindow(Qt.QWidget):
     def __init__(self):

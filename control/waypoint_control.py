@@ -12,6 +12,7 @@ class WaypointController:
         self.forward_speed = 2
         self.reverse_speed = 2
         self.reverse_turn = pi/3
+        self.completion_distance = 2
     
     def add_waypoint(self, x, y):
         self.points.append((x,y))
@@ -30,7 +31,7 @@ class WaypointController:
             x,y = self.points[0]
             distance = self.calc_distance(x, y)
             direction = self.calc_direction(x, y)
-            if distance < 2:
+            if distance < self.completion_distance:
                 self.points.pop(0)
             elif self.collision_control.blocked:
                 self.collision_control.set_steer(-self.reverse_turn)
@@ -58,5 +59,5 @@ class WaypointController:
  
     # direction to point x,y
     def calc_direction(self, x, y):
-        return atan2(-(x - self.state.x), y - self.state.y)
+        return atan2((x - self.state.x), y - self.state.y)
         

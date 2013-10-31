@@ -15,3 +15,28 @@ Maybe it won't... the waypoint control only overrides the steering when the coll
 Splitting the steering control out was ok, but making the collision control compete with waypoint control, rather than having collision control as the gatekeeper to speed/steering was a mistake. Much easier to have collision control implement those controller's interfaces and pass the commands on when it is safe.
 
 Some trouble getting stuck on trees. Car dodges a tree, gets to a waypoint and turns hard enough that the side of the car hits the tree and it's stuck. A few ways to deal with it... easiest would be to reduce the max steering angle so the car can't turn that hard. Not the nicest.
+
+2013-10-17
+----------
+
+After setting up the GitHub, not sure what to do next... some things:
+* Make the GPS/compass more releaistic. The GPS will give lat/lon via NMEA and it will be noisy. The controller should be using that rather than the clean x,y,z it gets now.
+* Deal with the side-of-car-bashing-into-tree issue.
+* Also general dodging behaviour is a bit dodgy ... urgh.
+* Mark dodge and blocked events on the map.
+
+2013-10-22
+----------
+
+The current plan is to put adaptor.py between the controller and sim, this will make sensors more like real ones. GPS for example will have fix/lat/lon/knots/heading and compass will have positive degrees to the right of north.
+
+2013-10-27
+----------
+
+Change of plan over the weekend, change morse itself to report lat/lon from the gps. Also add a new compass sensor.
+
+2013-10-31
+----------
+
+Switch to use the lat/lon of the GPS sensor and compass heading. The dodge/reverse appears to be broken.
+

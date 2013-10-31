@@ -12,7 +12,7 @@ class CollisionController:
         self.blocked = False
         self.dodging = False
         self.dodge_turn = pi/4
-        self.obstacle_range = 4 
+        self.obstacle_range = 4
 
         self.enabled = True
 
@@ -36,7 +36,7 @@ class CollisionController:
             else:
                 if left < m  and right > m:
                     self.steering_control.set_steer(self.dodge_turn)
-                    self.blocked = False                    
+                    self.blocked = False
                     self.dodging = True
                 elif right < m and left > m:
                     self.steering_control.set_steer(-self.dodge_turn)
@@ -44,7 +44,7 @@ class CollisionController:
                     self.dodging = True
                 elif mid < m and left > m and right > m: # maybe should turn harder in this case.
                     self.steering_control.set_steer(self.dodge_turn if random() > 0.5 else -self.dodge_turn)
-                    self.blocked = False                    
+                    self.blocked = False
                     self.dodging = True
                 else:
                     self.blocked = False
@@ -53,7 +53,7 @@ class CollisionController:
 
     def set_steer(self, angle):
         # allow manual external steering control in reverse.
-        if not self.enabled or self.speed_control.target_speed <= 0:        
+        if not self.enabled or self.speed_control.target_speed <= 0:
             self.steering_control.set_steer(angle)
 
     def set_speed(self, speed):

@@ -9,7 +9,7 @@ class SteeringController:
         self.target_heading = 0
         self.last_heading = 0
         self.Kp = 1.0
-        self.last_heading_error = 0   
+        self.last_heading_error = 0
 
     def set_steer(self, steering):
         self.enabled = False
@@ -23,8 +23,7 @@ class SteeringController:
         if not self.enabled:
             return
 
-        heading = self.vstate.yaw
-        self.last_heading_error = wrap_radians(self.target_heading - heading)
+        self.last_heading_error = wrap_radians(self.target_heading - self.vstate.heading)
         self.controls.set_steer(self.Kp*self.last_heading_error)
     
     def status(self):
