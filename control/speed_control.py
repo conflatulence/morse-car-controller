@@ -18,6 +18,7 @@ class SpeedController:
         
         self.last_update_time = 0
         
+
     def stop(self):
         self.stopping = True
         self.target_speed = 0 

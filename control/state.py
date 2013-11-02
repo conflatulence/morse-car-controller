@@ -13,9 +13,9 @@ class VehicleState:
         self.x = 0
         self.y = 0
         self.z = 0
-        
+
         self.speed = 0
-        
+        self.distance = 0
         self.time = 0
 
         self.origin = (-33.80784, 151.176614)
@@ -29,6 +29,7 @@ class VehicleState:
 
     def update_odometry(self, dS, dt):
         self.speed = dS/dt
+        self.distance += dS
 
     def update_compass(self, heading):
         self.heading = radians(heading)

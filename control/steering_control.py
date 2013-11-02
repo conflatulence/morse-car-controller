@@ -16,7 +16,7 @@ class SteeringController:
         self.controls.set_steer(steering)
 
     def set_heading(self, heading):
-        #self.enabled = True
+        self.enabled = True
         self.target_heading = heading
 
     def update_heading(self):

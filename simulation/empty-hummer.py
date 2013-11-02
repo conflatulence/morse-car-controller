@@ -14,10 +14,13 @@ hummer.append(odometry)
 gps = GPS()
 gps.frequency(10)
 gps.properties(origin_lat=-33.80784, origin_lon=151.176614)
+gps.properties(latlon_stddev=3)
+gps.properties(alt_stddev=3)
 hummer.append(gps)
 
 compass = Compass()
 compass.frequency(10)
+compass.properties(heading_stddev=2, heading_bias=2)
 hummer.append(compass)
 
 scanner = Hokuyo()

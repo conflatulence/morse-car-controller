@@ -240,6 +240,21 @@ class CollisionPlot(TimePlot):
         else:
             self.update_plot(t,v)
 
+class RangePlot(TimePlot):
+    def __init__(self):
+        lines = (('left', Qt.Qt.green), ('middle', Qt.Qt.red), ('right', Qt.Qt.blue))
+        TimePlot.__init__(self, 'Ranges', lines)
+
+    def update(self, msg):
+        v = {}
+        try:
+            t = msg[u'state'][u'time']
+            d = msg[u'collision_control']
+            v['left'], v['middle'],v['right'] = d[u'ranges']
+        except KeyError as err:
+            error("Invalid message %s", err)
+        else:
+            self.update_plot(t,v)
 
 class MainWindow(Qt.QWidget):
     def __init__(self):
@@ -250,10 +265,11 @@ class MainWindow(Qt.QWidget):
         self.plots = []
         self.next_row = 0
 
-        self.add_plot(ThrottlePlot())
-        self.add_plot(SpeedPlot())
+        #self.add_plot(ThrottlePlot())
+        #self.add_plot(SpeedPlot())
         #self.add_plot(OrientationPlot())
         self.add_plot(SteerPlot())
+        self.add_plot(RangePlot())
         self.add_plot(CollisionPlot())
 
         self.paused = False

@@ -6,7 +6,7 @@ import json
 components = [
 'hummer.motion',
 'hummer.gps',
-'hummer.pose',
+#'hummer.pose',
 'hummer.scanner',
 'hummer.odometry',
 'hummer.compass'
