@@ -61,26 +61,30 @@ Usage
 
 I like to do this in 3 separate terminals. For each term, cd to the morse-car-controller checkout.
 
-1. In Term 1, start morse
+In Term 1, start morse
+
 	cd simulator
 	export MORSE_RESOURCE_PATH=$PWD
 	morse run TestEnv
 
 The morse window should appear with the car in the middle of the window.
 
-2. In Term 2, start the controller
+In Term 2, start the controller
+
 	cd controller
 	./main.py
 
 The controller should display a few messages saying it has connected with various sensors in morse.
 
-3. In Term 3, tell the car to do something, drive to a waypoint for example. There are example command files in user/cmds. example-go.cmd changes some paremeters of the speed controller, sets some waypoints and then enables the waypoint controller, causing the car to start driving to the first waypoint.
+In Term 3, tell the car to do something, drive to a waypoint for example. There are example command files in user/cmds. example-go.cmd changes some paremeters of the speed controller, sets some waypoints and then enables the waypoint controller, causing the car to start driving to the first waypoint.
+
 	cd user
 	./sendcmd.py cmds/example-go.cmd
 
 That should be enough to see the car do something.
 
 The various monitor programs can be run from a 4th terminal. They don't require any arguments. e.g.
+
 	cd user
 	./monitor.py &
 	./map.py &
