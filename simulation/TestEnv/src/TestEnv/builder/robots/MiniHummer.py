@@ -8,8 +8,6 @@ class Minihummer(Robot):
     """
     def __init__(self, name = None, debug = True):
 
-        print("############################### THIS LINE WAS EXECUTED ###############################")
-
         # MiniHummer.blend is located in the data/robots directory
         Robot.__init__(self, 'TestEnv/robots/MiniHummer.blend', name)
         self.properties(classpath = "TestEnv.robots.MiniHummer.Minihummer")

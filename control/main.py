@@ -14,7 +14,7 @@ from utils import recursive_round, clamp
 from controls import VehicleControls
 from state import VehicleState
 from speed_control import SpeedController
-from steering_control import SteeringController
+from steering_control import HeadingController
 from collision_control import CollisionController
 from waypoint_control import WaypointController
 
@@ -31,9 +31,9 @@ class Main:
         self.controls = VehicleControls()
         self.state = VehicleState()
         self.speed_control = SpeedController(self.state, self.controls)
-        self.steering_control = SteeringController(self.state, self.controls)
-        self.collision_control = CollisionController(self.state, self.speed_control, self.steering_control)
-        self.waypoint_control = WaypointController(self.state, self.collision_control)
+        self.collision_control = CollisionController(self.state, self.speed_control, self.controls)
+        self.heading_control = HeadingController(self.state, self.collision_control)
+        self.waypoint_control = WaypointController(self.state, self.collision_control, self.heading_control)
 
     def exit(self):
         raise asyncore.ExitNow("Exiting")
@@ -42,6 +42,9 @@ class Main:
         msg = '%s %s %s %s\n' % (identifier, component, message, json.dumps(data))
         self.service_client.send_msg(msg)
 
+    def get_stream_port(self, return_id, sensor_name):
+        self.send_service_message(return_id, 'simulation', 'get_stream_port', [sensor_name])
+    
     # morse convention is +steer to the left and +force is backwards.
     # The controls class is switched so +steer is to the right and +force is forwards.
     def send_motion_message(self):
@@ -56,11 +59,11 @@ class Main:
 
     def service_connect(self, client):
         info("Connected to morse service.")
-        self.send_service_message('motion_port', 'simulation', 'get_stream_port', ['hummer.motion'])
-        self.send_service_message('range_port', 'simulation', 'get_stream_port', ['hummer.scanner'])
-        self.send_service_message('odometry_port', 'simulation', 'get_stream_port', ['hummer.odometry'])
-        self.send_service_message('gps_port', 'simulation', 'get_stream_port', ['hummer.gps'])
-        self.send_service_message('compass_port', 'simulation', 'get_stream_port', ['hummer.compass'])
+        self.get_stream_port('motion_port', 'robot.motion')
+        self.get_stream_port('range_port', 'robot.scanner')
+        self.get_stream_port('odometry_port', 'robot.odometry')
+        self.get_stream_port('gps_port', 'robot.gps')
+        self.get_stream_port('compass_port', 'robot.compass')
 
     def service_disconnect(self, client):
         info("Disconnected from morse service.")
@@ -170,7 +173,7 @@ class Main:
         try:
             obj = json.loads(line)
             self.state.update_compass(obj['heading'])
-            self.steering_control.update_heading()
+            self.heading_control.update_heading()
         except ValueError as err:
             warning("Invalid compass message:" + str(err)) 
             
@@ -179,7 +182,7 @@ class Main:
         d['state'] = self.state.status()
         d['controls'] = self.controls.status()
         d['speed_control'] = self.speed_control.status()
-        d['steering_control'] = self.steering_control.status()
+        d['heading_control'] = self.heading_control.status()
         d['collision_control'] = self.collision_control.status()
         d['waypoint_control'] = self.waypoint_control.status()
         

@@ -40,3 +40,34 @@ Change of plan over the weekend, change morse itself to report lat/lon from the 
 
 Switch to use the lat/lon of the GPS sensor and compass heading. The dodge/reverse appears to be broken.
 
+2013-11-03
+----------
+
+GPS and compass noise added directly into the morse sensors, it is less effort than the official modifier method. Morse additions put up on the github.
+
+Reverse seems to work ok now with the addition of state.distance. Not sure what to try next.
+
+2013-11-16
+----------
+
+Split gps/compass noise into modifiers to conform to existing morse.
+
+Copied hummer to make minihummer, copied code to scale it down, trouble when scaling down the blend file. One cannot just scale by 1/3 in blender object mode. The meshes must be rescaled in edit mode. Some pain learning about object origins while doing this... scaling meshes with not-the-real-origin origin messes up the robot model in morse. Next some trouble with the front of the hummer tilting down, "fixed" by reducing the suspension length. Not sure if that was the right thing to do. Also reduced minihummer's mass (in blender) from 10 to 3.
+
+2014-01-11
+----------
+
+Many changes... 
+
+The simulation is changed to use the auto-generated file structure. Get this when making a robot using morse create and morse add. The minihummer robot is outside of the morse source tree and inside the simulation dir. Part of this is the MORSE_RESOURCE_PATH environment variable must be set to somedir/morse-car-controller/simulation to pick up the environments in simulation/environments.
+
+The collision control is changed a lot. First, the collision controller no longer takes a references to the steering control. The steering control is renamed to heading control, and collision control gets the steering parameter set by it.
+
+What happens now is, waypoint control turns heading control on and off when it wants. Either heading or waypoint control will request a steering and speed. The request is to collision control. If the steering and speed won't cause a collision, ok the steering is set and the speed controller gets the desired speed, otherwise the collision control will try to steer another way or say "blocked" and stop.
+
+Inside the collision control, the method of detecting a collision is changed. The code now generates a path (series of x-y points) that it thinks the car will take and checks if that path is near obstacles detected in the scan. If it is near, different paths will be tested with increasing steer deviation until either a clear path or there are no more paths to try, at that point the car is "blocked".
+
+This method is sort-of working... there are still bugs where the car acts blocked when it should not ... also the length/turning-circle calcution seems wrong. Want to measure turning circle for a number of steering angles to see what it should be.
+
+
+
