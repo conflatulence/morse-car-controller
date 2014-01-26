@@ -2,6 +2,10 @@
 
 from math import sin, cos, asin, atan2, sqrt, degrees, radians
 
+from collections import namedtuple
+
+GeoPoint = namedtuple('GeoPoint',['lat','lon'])
+
 earth_radius = 6371000.0
 
 # from http://www.movable-type.co.uk/scripts/latlong.html

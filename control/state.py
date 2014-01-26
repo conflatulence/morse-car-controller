@@ -1,6 +1,6 @@
 
 
-from geo import *
+from geomath import *
 
 class VehicleState:
     def __init__(self):
@@ -32,7 +32,7 @@ class VehicleState:
         self.distance += dS
 
     def update_compass(self, heading):
-        self.heading = radians(heading)
+        self.heading = heading
         self.yaw = -self.heading
 
     def status(self):

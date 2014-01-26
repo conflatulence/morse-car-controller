@@ -12,25 +12,26 @@ class SpeedController:
         self.Kp = 10
         self.Ki = 5
         self.Kd = 0
-        
+
+        self.enabled = True
+
         self.throttle = 0
         self.brake = 0
-        
+
         self.last_update_time = 0
-        
 
     def stop(self):
         self.stopping = True
         self.target_speed = 0 
         self.controls.throttle = 0
         self.controls.brake = 2
-        
+
     def set_speed(self, speed):
         if self.target_speed > 0 and speed <= 0 or self.target_speed < 0 and speed >= 0:
             self.stop()
-        
+
         self.target_speed = clamp(-10, 10, speed)
-        
+
     def adjust_speed(self, amount):
         self.set_speed(self.target_speed + amount) 
 
@@ -38,10 +39,10 @@ class SpeedController:
         current_speed = self.vstate.speed
         dt = self.vstate.time - self.last_update_time
         assert(current_speed >= 0)
-        
+
         if self.stopping and abs(current_speed) < 0.1:
             self.stopping = False
-        
+
         if self.stopping or self.target_speed == 0:
             integral = 0
             error = 0
@@ -51,23 +52,24 @@ class SpeedController:
             error = abs(self.target_speed) - current_speed
             integral = self.last_integral + error*dt
             derivative = (error - self.last_error)/dt
-            
+
             throttle = self.Kp*error + self.Ki*integral + self.Kd*derivative
-            
+
             throttle = clamp(0, 40, throttle)
             brake = 0
-            
+
             if self.target_speed < 0:
                 throttle = -throttle
 
         self.last_error = error
         self.last_integral = integral
-        
+
         self.controls.throttle = throttle
         self.controls.brake = brake
 
     def status(self):
         d = {}
+        d['enabled'] = self.enabled
         d['target'] = self.target_speed
         d['integral'] = self.last_integral
         d['error'] = self.last_error

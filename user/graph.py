@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 # based on Qwt-5.0.0/examples/data_plot
-#!/usr/bin/env python
 
 import sys
 import json

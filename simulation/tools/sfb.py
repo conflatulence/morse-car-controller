@@ -6,19 +6,20 @@ import json
 import re
 import logging
 from logging import warning, error, info
+from math import radians
 
-components = ['hummer.motion','hummer.gps','hummer.pose','hummer.scanner','hummer.odometry']
+components = ['robot.motion','robot.gps','robot.pose','robot.scanner','robot.odometry']
 
 if __name__ == '__main__':
 
-    steer = float(sys.argv[1])
+    steer = radians(float(sys.argv[1]))
     force = float(sys.argv[2])
     brake = float(sys.argv[3])
 
     sock = socket.create_connection(("localhost", 4000))
     sockf = sock.makefile()
 
-    msg = '%s simulation get_stream_port %s\n' % ('CMD1', json.dumps(['hummer.motion']))
+    msg = '%s simulation get_stream_port %s\n' % ('CMD1', json.dumps(['robot.motion']))
     sock.send(msg.encode())
     line = sockf.readline()
 

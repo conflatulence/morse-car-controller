@@ -14,9 +14,11 @@ from utils import recursive_round, clamp
 from controls import VehicleControls
 from state import VehicleState
 from speed_control import SpeedController
-from steering_control import HeadingController
+from heading_control import HeadingController
 from collision_control import CollisionController
 from waypoint_control import WaypointController
+
+from morse_wrapper import MorseWrapper
 
 class Main:
     def __init__(self):
@@ -35,16 +37,18 @@ class Main:
         self.heading_control = HeadingController(self.state, self.collision_control)
         self.waypoint_control = WaypointController(self.state, self.collision_control, self.heading_control)
 
+        self.morse_wrapper = MorseWrapper()
+
     def exit(self):
         raise asyncore.ExitNow("Exiting")
-    
+
     def send_service_message(self, identifier, component, message, data=[]):
         msg = '%s %s %s %s\n' % (identifier, component, message, json.dumps(data))
         self.service_client.send_msg(msg)
 
     def get_stream_port(self, return_id, sensor_name):
         self.send_service_message(return_id, 'simulation', 'get_stream_port', [sensor_name])
-    
+
     # morse convention is +steer to the left and +force is backwards.
     # The controls class is switched so +steer is to the right and +force is forwards.
     def send_motion_message(self):
@@ -62,8 +66,9 @@ class Main:
         self.get_stream_port('motion_port', 'robot.motion')
         self.get_stream_port('range_port', 'robot.scanner')
         self.get_stream_port('odometry_port', 'robot.odometry')
-        self.get_stream_port('gps_port', 'robot.gps')
-        self.get_stream_port('compass_port', 'robot.compass')
+        #self.get_stream_port('gps_port', 'robot.gps')
+        #self.get_stream_port('compass_port', 'robot.compass')
+        self.get_stream_port('pose_port', 'robot.pose')
 
     def service_disconnect(self, client):
         info("Disconnected from morse service.")
@@ -102,6 +107,10 @@ class Main:
             self.compass_client = Client(connect_fn=self.compass_connect, msg_fn=self.compass_message, close_fn=self.compass_disconnect)
             self.compass_client.create_connection(self.sim_host, int(data))
 
+        elif identifier == 'pose_port':
+            self.pose_client = Client(connect_fn=self.pose_connect, msg_fn=self.pose_message, close_fn=self.pose_disconnect)
+            self.pose_client.create_connection(self.sim_host, int(data))
+
         else:
             warning("Unhandled identifier:" + identifier)
 
@@ -119,7 +128,7 @@ class Main:
         
     def range_disconnect(self, client):
         info("Disconnected from range port.")
- 
+
     def range_message(self, client, line):
         try:
             obj = json.loads(line)
@@ -168,15 +177,38 @@ class Main:
 
     def compass_disconnect(self, client):
         info("Disconnected from compass port.")
-    
+
     def compass_message(self, client, line):
         try:
             obj = json.loads(line)
             self.state.update_compass(obj['heading'])
-            self.heading_control.update_heading()
+            self.heading_control.update()
         except ValueError as err:
             warning("Invalid compass message:" + str(err)) 
-            
+
+    def pose_connect(self, client):
+        info("Connected to pose port.")
+
+    def pose_disconnect(self, client):
+        info("Disconnected from pose port.")
+
+    def pose_message(self, client, line):
+        try:
+            obj = json.loads(line)
+            gps_msg, compass_msg = self.morse_wrapper.pose_message(obj)
+
+            self.state.update_gps(
+                gps_msg['lat'], gps_msg['lon'],
+                gps_msg['alt'], gps_msg['speed'], gps_msg['heading'])
+
+            self.state.update_compass(compass_msg['heading'])
+
+            self.waypoint_control.update()
+            self.heading_control.update()
+
+        except ValueError as err:
+            warning("Invalid pose message:" + str(err))
+
     def send_status(self):
         d = {}
         d['state'] = self.state.status()
@@ -185,22 +217,22 @@ class Main:
         d['heading_control'] = self.heading_control.status()
         d['collision_control'] = self.collision_control.status()
         d['waypoint_control'] = self.waypoint_control.status()
-        
+
         msg = json.dumps(recursive_round(d,4)) + '\n'
         self.status_server.broadcast(msg)
 
     def status_client_connect(self, client):
         info("Status client connected.")
-        
+
     def status_client_disconnect(self, client):
         info("Status client disconnected.")
 
     def status_client_msg(self, client, line):
         warning("Status client received message, but no messages are supported.")
-    
+
     def command_client_connect(self, client):
         info("Command client connected.")
-        
+
     def command_client_disconnect(self, client):
         info("Command client disconnected.")
 
@@ -210,13 +242,13 @@ class Main:
         except ValueError as err:
             client.send_msg("ERROR: Client message is not valid JSON:" + str(err))
             return
-        
+
         try:
             action, class_name, field_name, params = d
         except IndexError:
             client.send_msg("ERROR: Invalid message:" + str(d))
             return
-    
+
         if action == 'set':
             try:
                 inst = getattr(self, class_name)
@@ -227,7 +259,7 @@ class Main:
             except AttributeError as err:
                 client.send_msg("ERROR: Invalid message recipient:" + str(err))
                 return
-            
+
         elif action == 'call':
             try:
                 inst = getattr(self, class_name)
@@ -239,7 +271,7 @@ class Main:
             if not callable(func):
                 warning("ERROR: Invalid messaged attempted to call a non-callable object.")
                 return
-            
+
             try:
                 if type(params) is list:
                     func(*params)
@@ -253,14 +285,14 @@ class Main:
         else:
             client.send_msg("ERROR: Unknown action:" + action)
             return
-        
+
         client.send_msg("OK")
 
 def sigint_handler(signnum, frame):
     raise asyncore.ExitNow("Exiting")
-    
+
 if __name__ == '__main__':
-    
+
     logging.basicConfig(level=logging.INFO)
 
     signal.signal(signal.SIGINT, sigint_handler)
@@ -271,4 +303,4 @@ if __name__ == '__main__':
         asyncore.loop()
     except asyncore.ExitNow:
         pass
-    
+

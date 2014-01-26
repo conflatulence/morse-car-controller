@@ -21,7 +21,7 @@ class HeadingController:
         self.enabled = True
         self.target_heading = heading
 
-    def update_heading(self):
+    def update(self):
         if not self.enabled:
             return
 

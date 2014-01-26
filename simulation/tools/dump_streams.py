@@ -8,12 +8,12 @@ import logging
 from logging import warning, error, info
 
 components = [
-'hummer.motion',
-'hummer.gps',
-#'hummer.pose',
-'hummer.scanner',
-'hummer.odometry',
-'hummer.compass'
+'robot.motion',
+'robot.gps',
+#'robot.pose',
+'robot.scanner',
+'robot.odometry',
+'robot.compass'
 ]
 
 if __name__ == '__main__':

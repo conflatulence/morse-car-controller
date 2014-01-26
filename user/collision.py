@@ -30,8 +30,9 @@ class XYPlot(Qt.QWidget):
         self._scale = 1.0
         self._offset_x = 400
         self._offset_y = 300
+        self.symbol_size = 1.0
 
-        self.message = ''
+        self.messages = []
 
         self.groups = []
 
@@ -77,7 +78,10 @@ class XYPlot(Qt.QWidget):
         qp = QtGui.QPainter()
         qp.begin(self)
 
-        qp.drawText(20,20, self.message)
+        line_y = 20
+        for line in self.messages:
+            qp.drawText(20, line_y, line)
+            line_y += 20
 
         qp.translate(self._offset_x, self._offset_y)           
         qp.scale(self._scale, -self._scale)
@@ -116,10 +120,13 @@ class CollisionPlot(XYPlot):
     def __init__(self):
         XYPlot.__init__(self)
 
-        self.path_group = PlotGroup(color=Qt.Qt.blue, symbol='plus')
+        self.blocked_path_group = PlotGroup(color=Qt.Qt.red, symbol='plus')
+        self.add_plot_group(self.blocked_path_group)
+
+        self.path_group = PlotGroup(color=Qt.Qt.green, symbol='plus')
         self.add_plot_group(self.path_group)
 
-        self.obstacle_group = PlotGroup(color=Qt.Qt.red, symbol='cross')
+        self.obstacle_group = PlotGroup(color=Qt.Qt.blue, symbol='cross')
         self.add_plot_group(self.obstacle_group)
 
         self.symbol_size = 0.1
@@ -134,15 +141,22 @@ class CollisionPlot(XYPlot):
             enabled = colmsg[u'enabled']
             blocked = colmsg[u'blocked']
             path = colmsg[u'path']
+            blocked_paths = colmsg[u'blocked_paths']
             obstacles = colmsg[u'obstacles']
+            requested_steer = degrees(colmsg[u'requested_steer'])
+            actual_steer = degrees(msg[u'controls'][u'steer'])
             reversing = msg[u'waypoint_control'][u'reversing']
         except KeyError:
             logging.error("Invalid message.")
         else:
             #print(msg)
-            self.message = 'Enabled %s Blocked %s Reversing %s' % (
-                enabled, blocked, reversing)
+            self.messages = []
+            self.messages.append('Enabled %s Blocked %s Reversing %s' % (
+                enabled, blocked, reversing))
+            self.messages.append('Steer req. %0.2f act. %0.2f degrees' % (
+                requested_steer, actual_steer))
             self.path_group.data = path
+            self.blocked_path_group.data = blocked_paths
             self.obstacle_group.data = obstacles
             self.update()
 

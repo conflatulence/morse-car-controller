@@ -71,3 +71,19 @@ This method is sort-of working... there are still bugs where the car acts blocke
 
 
 
+2013-01-26
+----------
+
+Long weekend, another everything-and-the-kitchen-sink commit.
+
+At some point the collision control got broken and steering was reversed. This took much longer to figure out than it should have. In the process, user/replay.py was born to step through the status information.
+
+The collision control has been changed to test two paths, the left wheel and the right wheel. Not convinced it improved things much. The problem still persists where the car appears to be passed an obstacle but stops, does a reverse and continues again. Another change to deal with that problem was when in the presence of obstacles, the heading controller can only turn the car a small amount. Again not a perfect fix but getting better.
+
+The turning circle calculation for path prediction in collision control got more detailed but I'm sure it's still wrong.
+
+At one point it seemed like a good idea to get the GPS and Compass into MORSE code base. Submitted the request and got positive response, only a few things to clean and then change my mind and decide to use MORSE pose and put GPS and Compass simulation into morse_wrapper.py. Sure this was annoying for MORSE people...some regrets.
+
+Next things, the morse_wrapper.py will probably be expanded to include most of what is currently in main.py. Preparing for the day when real sensors may be used.
+
+Still playing with collision control, there must be a better way.

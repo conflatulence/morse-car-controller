@@ -6,12 +6,16 @@ from inspect import stack
 
 class VehicleControls:
     def __init__(self):
+        # steering is in radians
+        # positive steering value turns right.
+        # morse is the opposite but it gets switched in main.py
         self.throttle = 0
         self.brake = 0
         self.steer = 0
+        self.max_steer = pi/4
 
     def set_steer(self, val):
-        self.steer = clamp(-pi/4, pi/4, val)
+        self.steer = clamp(-self.max_steer, self.max_steer, val)
         #info('Controls set_steer %0.2f clamped to %0.2f from %s' % (val, self.steer, stack()[1][3]))
 
     def status(self):

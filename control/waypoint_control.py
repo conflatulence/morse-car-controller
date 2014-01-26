@@ -45,7 +45,7 @@ class WaypointController:
                 self.heading_control.enabled = False
                 self.reverse_start_distance = self.state.distance
                 self.collision_control.set_speed(-self.reverse_speed)
-                self.collision_control.set_steer(0)
+                self.collision_control.set_steer(self.reverse_turn)
                 self.reversing = True
                 debug("Waypoint control begin reversing")   
  
@@ -77,6 +77,7 @@ class WaypointController:
             self.last_direction = direction
 
         else: # no more waypoints left.
+            self.reverseing = False
             self.collision_control.stop()
             debug("Waypoint control completed all waypoints.")
 

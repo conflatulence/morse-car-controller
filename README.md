@@ -9,8 +9,6 @@ Dependencies
 MORSE installation instructions are here:
 http://www.openrobots.org/morse/doc/latest/user/installation.html
 
-There are some changes to MORSE (add lat/lon to GPS sensor and add compass sensor) used by this project, a fork of morse with these changes is here: https://github.com/conflatulence/morse.
-
 This project is using the MORSE socket interface so you don't need ROS or YARP.
 
 The graphical programs are using PyQt4 and PyQWT. Unfortunately they are python2 only.
@@ -42,7 +40,7 @@ control
 Code which reacts to senors and user input and sets actuator values accordingly. This is intended to run on the car's on-board computer.
 
 The most important files here are:
-main.py: this is the entry point to the controller. It connects with the simulated sensors and actuators. It also provides two servers. One is a status server which is a great spew of information about sensor values and other important stuff inside the controller program. The other server is for users to send commands to the car to do stuff and change various parameters of the controller.
+main.py: this is the entry point to the controller. It connects with the simulated sensors and actuators. It also provides two servers. One is a status server which is a great spew of information about sensor values and other important stuff inside the controller program. The other server is for users to send commands to the car to do stuff and change various parameters of the controller. These servers are currently hard-coded to 60212 and 60213.
 
 user
 ----
@@ -55,6 +53,7 @@ monitor.py: this is a GUI program that reads the controller's status server and 
 graph.py: another GUI like monitory.py but shows the variables graphed over time. This is more useful for determining wtf just happend.
 map.py: another GUI, this shows the bird's eye view of the car in it's environment. It shows things like the position, heading and waypoints.
 collision.py: another GUI, shows the scans and predicted paths from the collision controller.
+replay.py: GUI program that has no widgets (!) used replay a log of the status information one message at a time. Since it serves on the same port as the controller's status port it cannot run in at the same time as the controller.
 
 Usage
 =====
